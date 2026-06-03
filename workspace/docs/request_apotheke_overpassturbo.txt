@@ -1,0 +1,10 @@
+[out:json];
+area["ISO3166-1"="CH"]["admin_level"="2"];
+(
+  node["amenity"="pharmacy"](area);
+  way["amenity"="pharmacy"](area);
+  relation["amenity"="pharmacy"](area);
+);
+out center geom;
+
+--- DIESE ABFRAGE AUF OVERPASS-TURBO.EU GIBT UNS ALLE SCHWEIZER APOTHEKEN ---

@@ -1,1 +1,6 @@
 workspace/data/
+workspace/logs/
+workspace/results/
+workspace/src/__pycache__/
+workspace/**/.ipynb_checkpoints/
+workspace/docs/ESTAT_Census_2021_V2.parquet
