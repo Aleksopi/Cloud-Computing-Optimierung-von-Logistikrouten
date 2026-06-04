@@ -10,7 +10,9 @@ from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import numpy as np
+import requests as _http
 
+from app.config import settings
 from app.db.models import Assignment, Hub, Pharmacy, VehicleRoute
 
 logger = logging.getLogger(__name__)
@@ -27,6 +29,22 @@ LKW_SERVICE_MIN = 40
 LKW_MAX_PER_HUB = 3
 SHIFT_HOURS = 8.0
 COST_PER_KM = 0.15          # CHF/km (flat rate, backbone costs omitted here)
+
+
+def _road_geometry(waypoints: list[list[float]]) -> list[list[float]]:
+    """Call OSRM /route to get actual road geometry for an ordered list of [lon, lat] waypoints.
+    Falls back to the straight-line waypoints on any error."""
+    if len(waypoints) < 2:
+        return waypoints
+    coords = ";".join(f"{lon},{lat}" for lon, lat in waypoints)
+    url = f"{settings.osrm_url}/route/v1/driving/{coords}?overview=full&geometries=geojson"
+    try:
+        resp = _http.get(url, timeout=30)
+        resp.raise_for_status()
+        return resp.json()["routes"][0]["geometry"]["coordinates"]
+    except Exception as exc:
+        logger.warning(f"OSRM route geometry failed ({exc}), using straight lines")
+        return waypoints
 
 
 def _hav(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
@@ -102,7 +120,7 @@ def _solve_hub(hub_name: str, hub_lat: float, hub_lon: float, stops: list[dict])
                     vehicle_id=vehicle_id,
                     vehicle_type="EVan",
                     stops=route_stops,
-                    stop_coords=stop_coords,
+                    stop_coords=_road_geometry(stop_coords),
                     total_km=round(km_used, 2),
                     total_hours=round(hours_used, 2),
                     total_items=total_items,
@@ -155,7 +173,7 @@ def _solve_hub(hub_name: str, hub_lat: float, hub_lon: float, stops: list[dict])
                     vehicle_id=vehicle_id,
                     vehicle_type="LKW",
                     stops=route_stops,
-                    stop_coords=stop_coords,
+                    stop_coords=_road_geometry(stop_coords),
                     total_km=round(km_used, 2),
                     total_hours=round(hours_used, 2),
                     total_items=total_items,
@@ -172,7 +190,12 @@ def _solve_hub(hub_name: str, hub_lat: float, hub_lon: float, stops: list[dict])
 
 def run_routes(db) -> None:
     pharmacies = {p.id: p for p in db.query(Pharmacy).all()}
-    hubs = {h.name: h for h in db.query(Hub).filter(Hub.hub_type != "HQ").all()}
+    # Extract to plain dicts BEFORE ThreadPoolExecutor — SQLAlchemy ORM objects
+    # are session-bound and must not be accessed across threads.
+    hubs: dict[str, dict] = {
+        h.name: {"lat": float(h.lat), "lon": float(h.lon)}
+        for h in db.query(Hub).filter(Hub.hub_type != "HQ").all()
+    }
     assignments = db.query(Assignment).all()
 
     hub_stops: dict[str, list[dict]] = defaultdict(list)
@@ -180,7 +203,7 @@ def run_routes(db) -> None:
         p = pharmacies.get(a.pharmacy_id)
         if p:
             hub_stops[a.hub_name].append(
-                {"pharmacy_id": p.id, "lat": p.lat, "lon": p.lon, "demand": p.demand or 1}
+                {"pharmacy_id": p.id, "lat": float(p.lat), "lon": float(p.lon), "demand": int(p.demand or 1)}
             )
 
     db.query(VehicleRoute).delete()
@@ -190,10 +213,10 @@ def run_routes(db) -> None:
     all_routes: list[dict] = []
 
     def _process(hub_name: str):
-        hub = hubs[hub_name]
+        hub = hubs[hub_name]  # plain dict — safe for threads
         stops = hub_stops.get(hub_name, [])
         logger.info(f"  {hub_name}: {len(stops)} stops")
-        return _solve_hub(hub_name, hub.lat, hub.lon, stops)
+        return _solve_hub(hub_name, hub["lat"], hub["lon"], stops)
 
     with ThreadPoolExecutor(max_workers=8) as pool:
         futures = [pool.submit(_process, name) for name in hubs]

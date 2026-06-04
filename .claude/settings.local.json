@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python3 -c ' *)",
+      "Bash(BASE=\"/Users/aleksferro/Desktop/Code/DHBW/4 Semester/Cloud-Computing-Optimierung-von-Logistikrouten\" *)",
+      "Bash(curl -s http://localhost:8000/api/results/hubs)",
+      "Bash(docker exec *)"
+    ]
+  }
+}

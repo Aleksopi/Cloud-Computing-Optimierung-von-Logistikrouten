@@ -3,6 +3,7 @@ version: '3.9'
 services:
   postgres:
     image: postgis/postgis:16-3.4
+    platform: linux/amd64   # Only amd64 build available — runs via Rosetta on Apple Silicon
     container_name: pharma-postgres
     restart: unless-stopped
     environment:
@@ -28,6 +29,7 @@ services:
 
   osrm:
     build: ./osrm
+    platform: linux/amd64   # OSRM provides amd64 only — runs via Rosetta on Apple Silicon
     container_name: pharma-osrm
     restart: unless-stopped
     volumes:
@@ -37,6 +39,7 @@ services:
 
   backend:
     build: ./backend
+    platform: linux/arm64/v8
     container_name: pharma-backend
     restart: unless-stopped
     environment:
@@ -61,6 +64,7 @@ services:
 
   worker:
     build: ./backend
+    platform: linux/arm64/v8
     container_name: pharma-worker
     restart: unless-stopped
     environment:
@@ -85,6 +89,7 @@ services:
     build:
       context: ./frontend
       target: dev
+    platform: linux/arm64/v8
     container_name: pharma-frontend
     restart: unless-stopped
     environment:
