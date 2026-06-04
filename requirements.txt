@@ -1,4 +1,0 @@
-folium
-numpy
-pandas
-ortools
