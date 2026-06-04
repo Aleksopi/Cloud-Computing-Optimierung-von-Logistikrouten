@@ -1,6 +1,29 @@
-workspace/data/
-workspace/logs/
-workspace/results/
-workspace/src/__pycache__/
-workspace/**/.ipynb_checkpoints/
-workspace/docs/ESTAT_Census_2021_V2.parquet
+# Environment
+.env
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+
+# Node
+frontend/node_modules/
+frontend/dist/
+
+# OS
+.DS_Store
+
+# Docker volumes (not tracked)
+postgres_data/
+
+# OSRM data (large binary files — check in manually if desired)
+osrm/data/*.osrm
+osrm/data/*.osrm.*
+osrm/data/*.osm.pbf
+
+# Backend data (keep geojson but not large binaries)
+# backend/data/*.geojson  ← these ARE tracked
+
+# Old workspace
+workspace/

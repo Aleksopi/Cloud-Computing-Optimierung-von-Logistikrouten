@@ -1,0 +1,49 @@
+version: '3.9'
+
+# Usage: docker-compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+# Server path: /opt/pharma-logistics/
+
+services:
+  postgres:
+    restart: always
+    ports:
+      - "127.0.0.1:5432:5432"
+
+  redis:
+    restart: always
+    ports: []
+
+  osrm:
+    restart: always
+    ports:
+      - "10.0.0.1:5001:5000"
+
+  backend:
+    restart: always
+    ports: []
+    volumes:
+      - ./backend/data:/app/data
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 2
+
+  worker:
+    restart: always
+    command: celery -A app.celery_app worker --loglevel=info --concurrency=4
+
+  frontend:
+    build:
+      context: ./frontend
+      target: prod
+    restart: always
+    ports: []
+
+  nginx:
+    image: nginx:alpine
+    container_name: pharma-nginx
+    restart: always
+    ports:
+      - "0.0.0.0:80:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - backend
+      - frontend

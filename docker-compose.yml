@@ -1,0 +1,101 @@
+version: '3.9'
+
+services:
+  postgres:
+    image: postgis/postgis:16-3.4
+    container_name: pharma-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: pharma
+      POSTGRES_PASSWORD: pharma
+      POSTGRES_DB: pharma
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pharma"]
+      interval: 5s
+      timeout: 5s
+      retries: 15
+
+  redis:
+    image: redis:7-alpine
+    container_name: pharma-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+
+  osrm:
+    build: ./osrm
+    container_name: pharma-osrm
+    restart: unless-stopped
+    volumes:
+      - ./osrm/data:/data
+    ports:
+      - "5001:5000"
+
+  backend:
+    build: ./backend
+    container_name: pharma-backend
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql://pharma:pharma@postgres:5432/pharma
+      REDIS_URL: redis://redis:6379/0
+      OSRM_URL: http://osrm:5000
+      HQ_LAT: "46.9480"
+      HQ_LON: "7.4474"
+      HQ_NAME: "HQ_Bern"
+      DATA_DIR: /app/data
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend/data:/app/data
+      - ./backend/app:/app/app
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+
+  worker:
+    build: ./backend
+    container_name: pharma-worker
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql://pharma:pharma@postgres:5432/pharma
+      REDIS_URL: redis://redis:6379/0
+      OSRM_URL: http://osrm:5000
+      HQ_LAT: "46.9480"
+      HQ_LON: "7.4474"
+      HQ_NAME: "HQ_Bern"
+      DATA_DIR: /app/data
+    volumes:
+      - ./backend/data:/app/data
+      - ./backend/app:/app/app
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    command: celery -A app.celery_app worker --loglevel=info --concurrency=4
+
+  frontend:
+    build:
+      context: ./frontend
+      target: dev
+    container_name: pharma-frontend
+    restart: unless-stopped
+    environment:
+      BACKEND_URL: http://backend:8000
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./frontend/src:/app/src
+      - ./frontend/index.html:/app/index.html
+    depends_on:
+      - backend
+
+volumes:
+  postgres_data:
