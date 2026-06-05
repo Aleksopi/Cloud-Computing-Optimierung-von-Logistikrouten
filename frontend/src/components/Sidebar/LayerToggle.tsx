@@ -40,7 +40,7 @@ export function LayerToggle({ visibleLayers, pipelineStatus, onToggle, vehicleTy
   const avail = (l: LayerDef) => l.always || (l.step !== undefined && pipelineStatus[l.step]?.status === 'done')
   const routesDone = pipelineStatus[4]?.status === 'done'
 
-  // Read-only live-traffic status (the control itself lives in the sidebar Step 4 card).
+  // Read-only traffic-model status (the control itself lives in the sidebar Step 4 card).
   const [traffic, setTraffic] = useState<TrafficInfo | null>(null)
   useEffect(() => {
     let alive = true
@@ -118,12 +118,12 @@ export function LayerToggle({ visibleLayers, pipelineStatus, onToggle, vehicleTy
         })}
       </div>
 
-      {/* Live-traffic status (read-only; toggle lives in the sidebar Step 4 card) */}
+      {/* Traffic-model status (read-only; toggle lives in the sidebar Step 4 card) */}
       <div className="mt-2.5 pt-2 border-t border-slate-700/60">
         <div className="flex items-center gap-2 px-1">
           <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${
-            traffic?.enabled ? 'bg-amber-400 animate-pulse' : 'bg-slate-600'}`} />
-          <span className={`text-xs flex-1 ${traffic?.enabled ? 'text-amber-200' : 'text-slate-500'}`}>Live-Verkehr</span>
+            traffic?.enabled ? 'bg-amber-400' : 'bg-slate-600'}`} />
+          <span className={`text-xs flex-1 ${traffic?.enabled ? 'text-amber-200' : 'text-slate-500'}`}>Verkehrsmodell</span>
           {traffic?.enabled
             ? <span className="text-xs text-amber-300 bg-amber-950/40 border border-amber-800/40 px-1.5 py-0.5 rounded font-mono">
                 ×{traffic.effective_factor.toFixed(2)}

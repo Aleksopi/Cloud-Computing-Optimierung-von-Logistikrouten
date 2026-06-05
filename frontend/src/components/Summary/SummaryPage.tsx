@@ -571,7 +571,7 @@ function TrafficContextCard({ optimization }: { optimization: FullSummary['optim
         <span className="text-sm font-semibold text-slate-200">Verkehr &amp; Optimierung</span>
         <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
           on ? 'bg-amber-900/40 text-amber-300 border border-amber-700/40' : 'bg-slate-800 text-slate-500 border border-slate-700/50'}`}>
-          {on ? 'Live-Verkehr aktiv' : 'Statischer Faktor'}
+          {on ? 'Verkehrsmodell aktiv (Sim.)' : 'Statischer Faktor'}
         </span>
       </div>
 

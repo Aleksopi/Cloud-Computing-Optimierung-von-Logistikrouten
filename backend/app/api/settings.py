@@ -128,7 +128,7 @@ def update_system_config(body: SystemConfigBody):
         db.close()
 
 
-# ── Live-traffic endpoints ────────────────────────────────────────────────────
+# ── Traffic-model endpoints (time-of-day simulation) ──────────────────────────
 
 @router.get("/traffic")
 def get_traffic():

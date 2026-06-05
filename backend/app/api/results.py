@@ -28,7 +28,7 @@ def _window(start_h: float | None, hours: float | None) -> str:
 
 
 def _optimization_block(sys_raw: dict[str, str]) -> dict:
-    """Optimisation weights + the live-traffic context used by Step 4."""
+    """Optimisation weights + the traffic-model (time-of-day simulation) context used by Step 4."""
     def _f(key: str, default: float) -> float:
         try:
             return float(sys_raw.get(key, default))

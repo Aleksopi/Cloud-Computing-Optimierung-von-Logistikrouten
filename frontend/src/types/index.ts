@@ -88,7 +88,7 @@ export interface TrafficInfo {
   peak_intensity:     number
   static_factor:      number   // factor applied when live traffic is OFF
   effective_factor:   number   // factor Step 4 actually applies
-  current_congestion: number   // live "right now" multiplier
+  current_congestion: number   // modelled multiplier for the current time of day (simulated)
   shift_start:        number
   shift_hours:        number
   profile:            number[] // 24 hourly congestion multipliers

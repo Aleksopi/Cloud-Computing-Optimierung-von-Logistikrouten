@@ -35,9 +35,9 @@ DEFAULT_SYSTEM_CONFIG = [
     ("opt_weight_cost",     "0.40",   "Optimierungsgewicht: Kosten",       "Anteil Fahrtkosten am Score (0–1)"),
     ("opt_weight_time",     "0.35",   "Optimierungsgewicht: Zeit",         "Anteil Fahrzeit am Score (0–1)"),
     ("opt_weight_env",      "0.25",   "Optimierungsgewicht: Umwelt",       "Anteil CO₂ am Score (0–1)"),
-    ("traffic_factor",      "1.0",    "Verkehrsfaktor (statisch)",         "1.0 = Freifluss; >1.0 = Stau. Gilt nur wenn Live-Verkehr AUS ist."),
-    ("live_traffic_enabled", "0",     "Live-Verkehr",                      "1 = Stau-Modell (Tageszeit) aktiv; 0 = statischer Verkehrsfaktor"),
-    ("traffic_peak_intensity", "1.0", "Live-Verkehr: Stau-Intensität",     "Skaliert die Hauptverkehrs-Aufschläge (1.0 = Standard)"),
+    ("traffic_factor",      "1.0",    "Verkehrsfaktor (statisch)",         "1.0 = Freifluss; >1.0 = Stau. Gilt nur wenn das Verkehrsmodell AUS ist."),
+    ("live_traffic_enabled", "0",     "Verkehrsmodell (Tageszeit)",        "1 = simuliertes Tageszeit-Stau-Modell aktiv (keine Echtzeitdaten); 0 = statischer Verkehrsfaktor"),
+    ("traffic_peak_intensity", "1.0", "Verkehrsmodell: Stau-Intensität",   "Skaliert die Hauptverkehrs-Aufschläge der Simulation (1.0 = Standard)"),
     ("co2_shadow_chf",      "0.12",   "CO₂-Schattenpreis (CHF/kg)",        "Monetarisierung der Umweltkosten"),
     ("max_catchment_km",    "10.0",   "Max. Einzugsgebiet-Radius (km)",    "Für Warenbedarf-Berechnung"),
     ("vz_hard_radius_km",   "45.0",   "VZ-Zuweisungsradius (km)",          "Apotheke → direkt zu VZ wenn ≤ Radius"),
@@ -165,16 +165,21 @@ def _ensure_vehicles(db):
 
 
 def _ensure_system_config(db):
-    """Insert any missing config keys without overwriting user-edited values."""
-    existing = {c.key for c in db.query(SystemConfig).all()}
-    added = 0
+    """Insert missing config keys and refresh labels/descriptions of existing
+    ones (user-edited *values* are never overwritten)."""
+    existing = {c.key: c for c in db.query(SystemConfig).all()}
+    added = updated = 0
     for key, value, label, description in DEFAULT_SYSTEM_CONFIG:
-        if key not in existing:
+        row = existing.get(key)
+        if row is None:
             db.add(SystemConfig(key=key, value=value, label=label, description=description))
             added += 1
-    if added:
+        elif row.label != label or row.description != description:
+            row.label, row.description = label, description  # metadata only, keep value
+            updated += 1
+    if added or updated:
         db.commit()
-        logger.info(f"[init_db] Added {added} system config entries")
+        logger.info(f"[init_db] System config: +{added} new, {updated} label(s) refreshed")
 
 
 def _import_pharmacies(db):

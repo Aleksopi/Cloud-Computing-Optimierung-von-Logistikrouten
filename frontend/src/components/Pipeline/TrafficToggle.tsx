@@ -19,8 +19,9 @@ const congestionLabel = (f: number) =>
   f >= 1.35 ? 'Dichter Verkehr' : f >= 1.12 ? 'Erhöhter Verkehr' : 'Freie Fahrt'
 
 /**
- * Live-traffic switch, attached to the Routenoptimierung (Step 4) card.
- * When ON, Step 4 scales drive times by a time-of-day congestion model.
+ * Traffic-model switch, attached to the Routenoptimierung (Step 4) card.
+ * When ON, Step 4 scales drive times by a time-of-day congestion *simulation*
+ * (not a live traffic feed).
  */
 export function TrafficToggle({ step4Done, onChanged }: Props) {
   const [info,    setInfo]    = useState<TrafficInfo | null>(null)
@@ -35,7 +36,7 @@ export function TrafficToggle({ step4Done, onChanged }: Props) {
   useEffect(() => {
     mounted.current = true
     load()
-    // Refresh the live "right now" congestion periodically.
+    // Refresh the modelled congestion for the current time of day periodically.
     const id = setInterval(load, 60_000)
     return () => { mounted.current = false; clearInterval(id) }
   }, [load])
@@ -65,14 +66,14 @@ export function TrafficToggle({ step4Done, onChanged }: Props) {
         <TrafficIcon className={`w-3.5 h-3.5 flex-shrink-0 ${on ? 'text-amber-400' : 'text-slate-500'}`} />
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-1.5">
-            <span className={`text-xs font-semibold ${on ? 'text-amber-200' : 'text-slate-300'}`}>Live-Verkehr</span>
+            <span className={`text-xs font-semibold ${on ? 'text-amber-200' : 'text-slate-300'}`}>Verkehrsmodell</span>
             {on && (
-              <span className="flex items-center gap-1 text-[10px] text-amber-300/90">
-                <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />LIVE
+              <span className="text-[9px] font-semibold text-amber-300/90 bg-amber-950/50 border border-amber-800/50 rounded px-1 py-px">
+                SIM
               </span>
             )}
           </div>
-          <span className="text-[10px] text-slate-500">Tageszeit-Stau in Schritt 4</span>
+          <span className="text-[10px] text-slate-500">Tageszeit-Simulation · Schritt 4</span>
         </div>
 
         {/* Switch */}
@@ -81,7 +82,7 @@ export function TrafficToggle({ step4Done, onChanged }: Props) {
           disabled={busy || !info}
           role="switch"
           aria-checked={on}
-          title={on ? 'Live-Verkehr ausschalten' : 'Live-Verkehr einschalten'}
+          title={on ? 'Verkehrsmodell ausschalten' : 'Verkehrsmodell einschalten'}
           className={`relative flex-shrink-0 w-9 h-5 rounded-full transition-colors duration-200
             ${on ? 'bg-amber-500' : 'bg-slate-600'} ${busy ? 'opacity-60' : 'hover:brightness-110'}`}
         >
@@ -90,13 +91,13 @@ export function TrafficToggle({ step4Done, onChanged }: Props) {
         </button>
       </div>
 
-      {/* Live detail (only when on) */}
+      {/* Model detail (only when on) */}
       {on && info && (
         <div className="mt-2.5 pt-2 border-t border-amber-800/30 space-y-2">
           <div className="flex items-center justify-between text-[11px]">
             <span className="flex items-center gap-1.5 text-slate-400">
               <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: congestionColor(cong) }} />
-              Jetzt
+              Modell · jetzt
             </span>
             <span className="font-medium" style={{ color: congestionColor(cong) }}>
               {congestionLabel(cong)} · {asDelay(cong)}

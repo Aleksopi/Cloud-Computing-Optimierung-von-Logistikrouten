@@ -1,5 +1,6 @@
 """
-Live-traffic model for route optimisation.
+Traffic model for route optimisation — a time-of-day **simulation**, NOT a live
+real-time traffic feed.
 
 Real-time per-segment traffic feeds require a paid provider (TomTom/HERE) and
 outbound internet — neither is available on the VPN-only deployment. Instead we
@@ -9,12 +10,13 @@ reproducible and genuinely affects the optimisation:
 
     drive_time = free_flow_time × congestion_factor
 
-When live traffic is OFF the optimiser falls back to the static ``traffic_factor``
-system-config value (default 1.0 = free flow).
+When the traffic model is OFF the optimiser falls back to the static
+``traffic_factor`` system-config value (default 1.0 = free flow).
 
 The factor fed into Step 4 is the **mean congestion across the delivery shift**
 (deterministic, so the summary can reproduce exactly what was used), while
-``current_congestion`` exposes the live "right now" value for UI indicators.
+``current_congestion`` exposes the modelled value for the current time of day
+for UI indicators (still simulated, not measured).
 """
 from __future__ import annotations
 

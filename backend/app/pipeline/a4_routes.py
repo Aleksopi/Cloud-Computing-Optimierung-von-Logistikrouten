@@ -215,9 +215,9 @@ def run_routes(db) -> None:
 
     sys_raw = {c.key: float(c.value) for c in db.query(SystemConfig).all()}
 
-    # ── Live-traffic + per-hub shift ──────────────────────────────────────────
+    # ── Traffic model (time-of-day simulation) + per-hub shift ────────────────
     # Each city/hub has its own delivery shift → its own averaged congestion when
-    # live traffic is ON. OFF → the static configured `traffic_factor`.
+    # the traffic model is ON. OFF → the static configured `traffic_factor`.
     live_traffic   = sys_raw.get("live_traffic_enabled", 0.0) >= 0.5
     peak_intensity = sys_raw.get("traffic_peak_intensity", 1.0)
     static_tf      = sys_raw.get("traffic_factor", 1.0)
@@ -243,7 +243,7 @@ def run_routes(db) -> None:
     logger.info(
         f"[Step 4] Last-mile fleet: {[v['name'] for v in last_mile_veh]} | "
         f"Backbone fleet: {[v['name'] for v in backbone_veh]} | "
-        f"Live-Verkehr: {'AN' if live_traffic else 'AUS'} (per-Hub Schicht & Verkehr)"
+        f"Verkehrsmodell: {'AN' if live_traffic else 'AUS'} (Tageszeit-Sim., per-Hub Schicht)"
     )
 
     # ── Prepare data — extract ALL ORM fields into plain dicts BEFORE threads ──

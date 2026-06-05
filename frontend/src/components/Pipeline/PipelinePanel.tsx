@@ -72,7 +72,7 @@ export function PipelinePanel({ status, onRunStep, onReset, loading, error }: Pi
               isLoading={loading === step}
               canRun={canRun(step)}
             />
-            {/* Live-traffic switch attached to the Routenoptimierung card */}
+            {/* Traffic-model (simulation) switch attached to the Routenoptimierung card */}
             {step === 4 && <TrafficToggle step4Done={status[4]?.status === 'done'} />}
           </div>
         ))}

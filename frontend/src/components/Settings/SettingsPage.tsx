@@ -6,7 +6,7 @@ const SETTINGS_TABS = [
   { id: 'fleet',      label: 'Flotte'        },
   { id: 'weights',    label: 'Gewichtung'    },
   { id: 'parameters', label: 'Parameter'     },
-  { id: 'traffic',    label: 'Live-Verkehr'  },
+  { id: 'traffic',    label: 'Verkehrsmodell' },
   { id: 'hours',      label: 'Öffnungszeiten' },
 ] as const
 type SettingsTab = typeof SETTINGS_TABS[number]['id']
@@ -561,7 +561,7 @@ function WeightsTab({ sysConf, setSysConf, flashSaved, setError }: {
   )
 }
 
-/* ── Live-traffic settings ───────────────────────────────────────────────────── */
+/* ── Traffic-model settings (time-of-day simulation) ─────────────────────────── */
 
 const congColor = (f: number) => (f >= 1.35 ? '#f87171' : f >= 1.12 ? '#fbbf24' : '#34d399')
 const asDelay   = (f: number) => `${f >= 1 ? '+' : '−'}${Math.round(Math.abs(f - 1) * 100)} %`
@@ -604,11 +604,13 @@ function TrafficSection() {
     <section className="bg-slate-900/60 border border-slate-700/60 rounded-xl overflow-hidden">
       <div className="flex items-center justify-between px-5 py-4 border-b border-slate-700/60 bg-slate-800/40">
         <div className="flex items-center gap-2.5">
-          <span className={`w-2 h-2 rounded-full ${on ? 'bg-amber-400 animate-pulse' : 'bg-slate-600'}`} />
+          <span className={`w-2 h-2 rounded-full ${on ? 'bg-amber-400' : 'bg-slate-600'}`} />
           <div>
-            <h3 className="text-sm font-semibold text-slate-200">Live-Verkehr</h3>
+            <h3 className="text-sm font-semibold text-slate-200">
+              Verkehrsmodell <span className="text-[10px] font-medium text-slate-500 align-middle">(Tageszeit-Simulation)</span>
+            </h3>
             <p className="text-xs text-slate-500 mt-0.5">
-              Tageszeitabhängiges Stau-Modell — skaliert die Fahrzeiten in der Routenoptimierung (Schritt 4)
+              Simuliertes, tageszeitabhängiges Stau-Modell — skaliert die Fahrzeiten in der Routenoptimierung (Schritt 4)
             </p>
           </div>
         </div>
@@ -631,8 +633,8 @@ function TrafficSection() {
           <Tile label="Angewandter Faktor" value={`×${info.effective_factor.toFixed(2)}`}
                 color={on ? congColor(info.effective_factor) : '#94a3b8'}
                 hint={on ? `Schicht-Ø · ${asDelay(info.effective_factor)} Fahrzeit` : 'aus statischem Verkehrsfaktor'} />
-          <Tile label="Verkehr jetzt" value={`×${cong.toFixed(2)}`} color={congColor(cong)}
-                hint={`${asDelay(cong)} · ${new Date().toLocaleTimeString('de-CH', { hour: '2-digit', minute: '2-digit' })} Uhr`} live={on} />
+          <Tile label="Modell · jetzt" value={`×${cong.toFixed(2)}`} color={congColor(cong)}
+                hint={`${asDelay(cong)} · ${new Date().toLocaleTimeString('de-CH', { hour: '2-digit', minute: '2-digit' })} Uhr (simuliert)`} />
         </div>
 
         {/* Peak intensity slider */}
@@ -667,10 +669,20 @@ function TrafficSection() {
         </div>
 
         <p className="text-xs text-slate-600 leading-relaxed">
-          Bei aktivem Live-Verkehr nutzt Schritt 4 den über das Lieferfenster gemittelten Stau-Faktor
+          Bei aktivem Verkehrsmodell nutzt Schritt 4 den über das Lieferfenster gemittelten Stau-Faktor
           statt des statischen Verkehrsfaktors. Höhere Fahrzeiten verschieben die Gewichtung im Score
           hin zu schnelleren Routen. Änderungen wirken beim nächsten Lauf von Schritt 4.
         </p>
+
+        {/* Honesty disclaimer */}
+        <div className="flex items-start gap-2 text-xs text-amber-300/90 bg-amber-950/20 border border-amber-800/40 rounded-lg px-3 py-2">
+          <span className="flex-shrink-0">ⓘ</span>
+          <span className="leading-relaxed">
+            <strong>Simulation, keine Echtzeitdaten:</strong> Die Werte stammen aus einem deterministischen
+            Tagesgang-Profil (Schweizer Pendlerverkehr), nicht aus einem Live-Verkehrsdienst. Eine echte
+            Anbindung (z.&nbsp;B. TomTom/HERE) bräuchte einen API-Key und ausgehenden Internetzugang.
+          </span>
+        </div>
       </div>
     </section>
   )
