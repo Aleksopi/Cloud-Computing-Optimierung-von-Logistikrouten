@@ -121,15 +121,6 @@ def _solve_vrp(
                         best_score, best_idx, best_d = score, idx, d_to
 
                 if best_idx is None:
-                    if cap is not None and restock_done == 0 and items_loaded < restock_thr:
-                        d_r = _hav(cur_lat, cur_lon, depot_lat, depot_lon)
-                        km_used     += d_r
-                        total_co2_g += d_r * co2_g_km
-                        hours_used  += (d_r / speed) * opt["traffic_factor"]
-                        cur_lat, cur_lon = depot_lat, depot_lon
-                        items_loaded = cap
-                        restock_done += 1
-                        continue
                     break
 
                 stop = remaining.pop(best_idx)
@@ -221,9 +212,9 @@ def run_routes(db) -> None:
         }
         for h in db.query(Hub).all()
     }
-    delivery_hub_dicts = {n: d for n, d in hub_dicts.items() if d["hub_type"] != "HQ"}
     assignments = db.query(Assignment).all()
 
+    # Build hub_stops FIRST — needed to decide which hubs are active
     hub_stops:  dict[str, list[dict]] = defaultdict(list)
     hub_demand: dict[str, int]        = defaultdict(int)
     for a in assignments:
@@ -236,6 +227,13 @@ def run_routes(db) -> None:
                 "close_hour": float(p.close_hour or 24.0),
             })
             hub_demand[a.hub_name] += d
+
+    # Include HQ in last-mile if it has directly-assigned pharmacies
+    # (happens when pharmacy is within hq_direct_radius_km configured in Step 3)
+    delivery_hub_dicts = {
+        n: d for n, d in hub_dicts.items()
+        if d["hub_type"] != "HQ" or hub_stops.get(n)
+    }
 
     db.query(VehicleRoute).delete()
     db.commit()

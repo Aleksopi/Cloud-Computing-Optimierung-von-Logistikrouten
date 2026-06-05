@@ -41,6 +41,7 @@ DEFAULT_SYSTEM_CONFIG = [
     ("vz_hard_radius_km",   "45.0",   "VZ-Zuweisungsradius (km)",          "Apotheke → direkt zu VZ wenn ≤ Radius"),
     ("n_vz",                "4",      "Anzahl Verteilzentren (VZ)",        "Wird bei Hub Placement (Step 2) verwendet"),
     ("n_mvz",               "20",     "Anzahl Mini-Verteilzentren (mVZ)",  "Wird bei Hub Placement (Step 2) verwendet"),
+    ("hq_direct_radius_km", "20.0",   "HQ Direktlieferungsradius (km)",    "Apotheken innerhalb dieses Radius beliefert HQ direkt"),
     ("vz_capacity",         "600",    "VZ-Lagerkapazität (Einheiten)",     "Max. Warenmenge je Verteilzentrum"),
     ("mvz_capacity",        "125",    "mVZ-Lagerkapazität (Einheiten)",    "Max. Warenmenge je Mini-Verteilzentrum"),
     ("default_demand_est",  "3",      "Bedarfsschätzung pro Apotheke",     "Proxy für Kapazitätsprüfung vor Step 2"),

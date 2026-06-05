@@ -8,17 +8,23 @@ interface SummaryPageProps { pipelineStatus: PipelineStatus }
 const COLOR_BY_TYPE: Record<string, string> = Object.fromEntries(VEHICLE_ROUTE_COLOR)
 const VCOL = (name: string, i: number) =>
   COLOR_BY_TYPE[name] ?? ['#f59e0b', '#8b5cf6', '#06b6d4', '#10b981'][i % 4]
-
 const fmt = (n: number, d = 1) => n.toLocaleString('de-CH', { maximumFractionDigits: d })
+const groupBy = <T,>(arr: T[], fn: (x: T) => string): Record<string, T[]> =>
+  arr.reduce((a, x) => { const k = fn(x); (a[k] ??= []).push(x); return a }, {} as Record<string, T[]>)
 
-function groupBy<T>(arr: T[], fn: (x: T) => string): Record<string, T[]> {
-  return arr.reduce((acc, x) => { const k = fn(x); (acc[k] ??= []).push(x); return acc }, {} as Record<string, T[]>)
-}
+const TABS = [
+  { id: 'overview',    label: 'Übersicht'    },
+  { id: 'vehicles',    label: 'Fahrzeuge'    },
+  { id: 'hubs',        label: 'Hubs'         },
+  { id: 'environment', label: 'CO2 & Umwelt' },
+] as const
+type TabId = typeof TABS[number]['id']
 
 export function SummaryPage({ pipelineStatus }: SummaryPageProps) {
   const [data, setData]       = useState<FullSummary | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError]     = useState<string | null>(null)
+  const [tab, setTab]         = useState<TabId>('overview')
   const step4Done = pipelineStatus[4]?.status === 'done'
 
   useEffect(() => {
@@ -53,232 +59,383 @@ export function SummaryPage({ pipelineStatus }: SummaryPageProps) {
   if (error) return <div className="flex items-center justify-center h-full text-red-400 text-sm">{error}</div>
   if (!data)  return null
 
-  const { overview, fleet_by_type, fleet, vehicle_specs, optimization, supply_chain, metrics, individual_routes } = data
+  const { overview, fleet_by_type, fleet, vehicle_specs, optimization, supply_chain, metrics, individual_routes, fleet_utilization } = data
   const deliverySpecs = vehicle_specs.filter(v => v.can_last_mile && v.enabled)
   const lkwSpec       = vehicle_specs.find(v => v.name === 'LKW')
   const co2Saved      = lkwSpec ? Math.max(0, Math.round(fleet.last_mile.total_km * lkwSpec.co2_g_per_km / 1000 - fleet.last_mile.total_co2_kg)) : 0
   const routesByType  = groupBy(individual_routes, r => r.vehicle_type)
 
   return (
-    <div className="h-full overflow-y-auto bg-slate-950 text-slate-100">
-      <div className="max-w-6xl mx-auto px-6 py-6 space-y-6">
-
-        {/* Header */}
-        <div className="flex items-start justify-between">
-          <div>
-            <h2 className="text-lg font-bold text-white">Analyse &amp; Ergebnisse</h2>
-            <p className="text-xs text-slate-500 mt-0.5">
-              {overview.pharmacies_assigned}/{overview.pharmacies_total} Apotheken versorgt
-              · {overview.hubs_total} Hubs · {supply_chain.vz_count} VZ + {supply_chain.mvz_count} mVZ
-              {metrics.unrouted_pharmacies > 0 && (
-                <span className="ml-2 text-amber-400 font-medium">
-                  · {metrics.unrouted_pharmacies} nicht zugewiesen
-                </span>
-              )}
-            </p>
-          </div>
-        </div>
-
-        {/* KPI Row */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-          <KpiCard label="Gesamtkosten"  main={`CHF ${fmt(overview.total_cost_chf, 0)}`}
-                   sub={`CHF ${fmt(metrics.cost_per_item_chf, 2)} / Einheit`}  accent="blue" />
-          <KpiCard label="CO2-Emissionen" main={`${fmt(overview.total_co2_kg)} kg`}
-                   sub={co2Saved > 0 ? `−${fmt(co2Saved)} kg vs. Vollflotte LKW` : `${fmt(metrics.co2_per_km_kg * 1000, 1)} g/km`}
-                   accent="green" />
-          <KpiCard label="Gesamtstrecke"  main={`${fmt(overview.total_km)} km`}
-                   sub={`Ø ${fmt(metrics.avg_km_per_route)} km / Route`}  accent="amber" />
-          <KpiCard label="Fahrzeugrouten" main={`${overview.total_last_mile_routes}`}
-                   sub={`Ø ${fmt(metrics.avg_stops_per_route)} Stops · ${fmt(metrics.total_driver_hours)} h gesamt`}
-                   accent="violet" />
-        </div>
-
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-
-          {/* ── Left: Fleet + CO2 ──────────────────────────────────────── */}
-          <div className="lg:col-span-2 space-y-6">
-
-            {/* Fleet cards */}
-            <Card title="Flotteneinsatz" sub="nach Fahrzeugtyp">
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                {deliverySpecs.map((spec, i) => {
-                  const stats = fleet_by_type[spec.name]
-                  if (!stats) return null
-                  return <FleetCard key={spec.id} spec={spec} stats={stats} color={VCOL(spec.name, i)} />
-                })}
-              </div>
-            </Card>
-
-            {/* CO2 bars */}
-            <Card title="CO2-Bilanz" sub="Emissionen nach Fahrzeugtyp">
-              <div className="space-y-3">
-                {[...deliverySpecs, ...(vehicle_specs.find(v => v.can_backbone && v.enabled && !v.can_last_mile) ? [vehicle_specs.find(v => v.can_backbone && v.enabled && !v.can_last_mile)!] : [])].map((spec, i) => {
-                  const stats = spec.can_last_mile ? fleet_by_type[spec.name] : fleet.backbone
-                  if (!stats) return null
-                  const pct = Math.min(100, (stats.total_co2_kg / Math.max(overview.total_co2_kg, 1)) * 100)
-                  return (
-                    <div key={spec.name}>
-                      <div className="flex justify-between text-xs mb-1.5">
-                        <span className="text-slate-400 flex items-center gap-2">
-                          <span className="w-2 h-2 rounded-full" style={{ backgroundColor: VCOL(spec.name, i) }}/>
-                          {spec.name}
-                        </span>
-                        <span className="text-slate-300">
-                          {fmt(stats.total_co2_kg)} kg
-                          <span className="text-slate-600 ml-2">{spec.co2_g_per_km} g/km · {fmt(stats.total_km)} km</span>
-                        </span>
-                      </div>
-                      <div className="h-2.5 bg-slate-800 rounded-full overflow-hidden">
-                        <div className="h-full rounded-full" style={{ width: `${pct}%`, backgroundColor: VCOL(spec.name, i) }} />
-                      </div>
-                    </div>
-                  )
-                })}
-                {co2Saved > 0 && (
-                  <div className="mt-2 text-xs text-emerald-400 bg-emerald-950/30 border border-emerald-800/30 rounded-lg px-3 py-2">
-                    CO2-Einsparung durch Sprinter vs. Vollflotte LKW: <strong>{fmt(co2Saved)} kg</strong>
-                  </div>
-                )}
-              </div>
-            </Card>
-
-            {/* Hub capacity table */}
-            <Card title="Lagerauslastung" sub="alle Hubs — geschätzt bis Step 3 abgeschlossen">
-              <div className="overflow-x-auto">
-                <table className="w-full text-xs">
-                  <thead>
-                    <tr className="text-slate-500 border-b border-slate-800">
-                      {['Hub','Typ','Auslastung','Last / Kapazität'].map(h => (
-                        <th key={h} className="pb-2 pr-4 text-left font-medium">{h}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-800/60">
-                    {metrics.hub_loads.map(h => (
-                      <tr key={h.name} className="text-slate-300 hover:bg-slate-800/20">
-                        <td className="py-2 pr-4 font-medium text-slate-200">{h.name}</td>
-                        <td className="py-2 pr-4 text-slate-500">{h.hub_type}</td>
-                        <td className="py-2 pr-4 w-32">
-                          <div className="flex items-center gap-2">
-                            <div className="flex-1 h-1.5 bg-slate-800 rounded-full overflow-hidden">
-                              <div className={`h-full rounded-full ${h.pct >= 100 ? 'bg-red-500' : h.pct >= 80 ? 'bg-amber-500' : 'bg-emerald-500'}`}
-                                   style={{ width: `${Math.min(h.pct, 100)}%` }} />
-                            </div>
-                            <span className={`text-xs font-medium w-10 ${h.pct >= 100 ? 'text-red-400' : h.pct >= 80 ? 'text-amber-400' : 'text-emerald-400'}`}>
-                              {h.pct}%
-                            </span>
-                          </div>
-                        </td>
-                        <td className="py-2 text-slate-400">{h.load} / {h.capacity} Einh.</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </Card>
-
-            {/* Vehicle specs */}
-            <Card title="Fahrzeugspezifikationen" sub="Aktive Flottenkonfiguration">
-              <div className="overflow-x-auto">
-                <table className="w-full text-xs">
-                  <thead>
-                    <tr className="text-slate-500 border-b border-slate-800">
-                      {['Fahrzeug','Einsatz','Kap.','Reichw.','CHF/km','CO2/km','Tempo','Fahrer/h','Stop'].map(h => (
-                        <th key={h} className="pb-2 pr-4 text-left font-medium">{h}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-800/60">
-                    {vehicle_specs.filter(v => v.enabled).map((v, i) => (
-                      <tr key={v.id} className="text-slate-300 hover:bg-slate-800/20">
-                        <td className="py-2 pr-4 font-semibold" style={{ color: VCOL(v.name, i) }}>{v.name}</td>
-                        <td className="py-2 pr-4">
-                          <span className="flex gap-1">
-                            {v.can_last_mile && <span className="px-1 rounded bg-cyan-900/40 text-cyan-300 text-xs">LM</span>}
-                            {v.can_backbone  && <span className="px-1 rounded bg-rose-900/40 text-rose-300 text-xs">BB</span>}
-                          </span>
-                        </td>
-                        <td className="py-2 pr-4">{v.capacity ?? 'unbegrenzt'}</td>
-                        <td className="py-2 pr-4">{v.range_km ? `${v.range_km} km` : '—'}</td>
-                        <td className="py-2 pr-4">CHF {v.cost_per_km}</td>
-                        <td className="py-2 pr-4">{v.co2_g_per_km} g</td>
-                        <td className="py-2 pr-4">{v.speed_kmh} km/h</td>
-                        <td className="py-2 pr-4">{v.driver_chf_h ? `CHF ${v.driver_chf_h}` : '—'}</td>
-                        <td className="py-2">{v.service_min ? `${v.service_min} min` : '—'}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </Card>
-          </div>
-
-          {/* ── Right: Optimisation + Supply chain ─────────────────────── */}
-          <div className="space-y-6">
-
-            <Card title="Optimierung" sub="Scoring-Gewichte">
-              <div className="space-y-3">
-                {[
-                  { label: 'Kosten',   value: optimization.weights.cost,        color: 'bg-blue-500' },
-                  { label: 'Zeit',     value: optimization.weights.time,        color: 'bg-amber-500' },
-                  { label: 'CO2',      value: optimization.weights.environment, color: 'bg-emerald-500' },
-                ].map(w => (
-                  <div key={w.label}>
-                    <div className="flex justify-between text-xs mb-1">
-                      <span className="text-slate-400">{w.label}</span>
-                      <span className="text-slate-300 font-medium">{Math.round(w.value * 100)}%</span>
-                    </div>
-                    <div className="h-1.5 bg-slate-800 rounded-full overflow-hidden">
-                      <div className={`h-full rounded-full ${w.color}`} style={{ width: `${w.value * 100}%` }}/>
-                    </div>
-                  </div>
-                ))}
-              </div>
-              <div className="mt-3 pt-3 border-t border-slate-800 space-y-1.5 text-xs">
-                <KV label="Verkehrsfaktor"  value={`${optimization.traffic_factor}`} />
-                <KV label="CO2-Preis"       value={`CHF ${optimization.co2_shadow_chf_per_kg}/kg`} />
-                <KV label="Schichtlänge"    value={`${optimization.shift_hours} h`} />
-                <KV label="Kosten/Einheit"  value={`CHF ${fmt(metrics.cost_per_item_chf, 2)}`} />
-                <KV label="CO2/km (ges.)"   value={`${fmt(metrics.co2_per_km_kg * 1000, 1)} g`} />
-                <KV label="Fahrstunden"     value={`${fmt(metrics.total_driver_hours)} h`} />
-              </div>
-            </Card>
-
-            <Card title="Lieferkette" sub={`${supply_chain.hq_name ?? 'HQ'} → VZ → mVZ`}>
-              <div className="space-y-2 text-xs">
-                <ChainRow label="HQ" count={1}                     color="bg-red-500" />
-                <ChainRow label="Verteilzentren (VZ)"   count={supply_chain.vz_count}   color="bg-blue-500" />
-                <ChainRow label="Mini-Verteilzentren"   count={supply_chain.mvz_count}  color="bg-teal-500" />
-                <ChainRow label="Apotheken"              count={supply_chain.pharmacy_count} color="bg-slate-400" />
-              </div>
-            </Card>
-          </div>
-        </div>
-
-        {/* Per-vehicle table */}
-        <Card title="Alle Fahrzeugrouten" sub="Last-Mile — nach Typ und Hub sortiert">
-          {Object.entries(routesByType).map(([type, routes]) => (
-            <VehicleTypeGroup key={type} type={type} routes={routes}
-                              color={VCOL(type, Object.keys(routesByType).indexOf(type))} />
-          ))}
-          {individual_routes.length === 0 && (
-            <p className="text-xs text-slate-500 py-4 text-center">Keine Routen vorhanden.</p>
+    <div className="h-full flex flex-col bg-slate-950 text-slate-100 overflow-hidden">
+      {/* Tab bar */}
+      <div className="flex-shrink-0 flex items-center gap-1 px-6 pt-4 pb-0 border-b border-slate-800">
+        {TABS.map(t => (
+          <button key={t.id} onClick={() => setTab(t.id)}
+                  className={`px-4 py-2 text-sm font-medium rounded-t-lg transition-colors border-b-2 -mb-px
+                    ${tab === t.id
+                      ? 'text-white border-blue-500 bg-slate-800/60'
+                      : 'text-slate-400 border-transparent hover:text-slate-200 hover:bg-slate-800/30'
+                    }`}>
+            {t.label}
+          </button>
+        ))}
+        <div className="ml-auto flex items-center gap-3 text-xs text-slate-500 pb-2">
+          {overview.pharmacies_assigned}/{overview.pharmacies_total} Apotheken
+          {metrics.unrouted_pharmacies > 0 && (
+            <span className="text-amber-400">· {metrics.unrouted_pharmacies} nicht zugewiesen</span>
           )}
-        </Card>
+        </div>
+      </div>
 
-        {/* Supply chain hierarchy */}
-        <Card title="Lieferketten-Hierarchie" sub="VZ-Einzugsgebiete aufklappen">
-          <div className="space-y-2">
-            {supply_chain.hierarchy.map(vz => <VzRow key={vz.name} vz={vz} />)}
-          </div>
-        </Card>
-
+      {/* Tab content */}
+      <div className="flex-1 overflow-y-auto">
+        {tab === 'overview'    && <OverviewTab    data={data} co2Saved={co2Saved} />}
+        {tab === 'vehicles'    && <VehiclesTab    deliverySpecs={deliverySpecs} routesByType={routesByType} fleetUtil={fleet_utilization} />}
+        {tab === 'hubs'        && <HubsTab        data={data} />}
+        {tab === 'environment' && <EnvironmentTab data={data} deliverySpecs={deliverySpecs} co2Saved={co2Saved} />}
       </div>
     </div>
   )
 }
 
-/* ── Sub-components ─────────────────────────────────────────────────────── */
+/* ══════════════════════════════════════════════════════════════════════════
+   TAB: Übersicht
+══════════════════════════════════════════════════════════════════════════ */
+function OverviewTab({ data, co2Saved }: { data: FullSummary; co2Saved: number }) {
+  const { overview, fleet_by_type, vehicle_specs, optimization, metrics, fleet_utilization } = data
+  const deliverySpecs = vehicle_specs.filter(v => v.can_last_mile && v.enabled)
+
+  return (
+    <div className="max-w-5xl mx-auto px-6 py-6 space-y-6">
+      {/* KPI row */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <KpiCard accent="blue"   label="Gesamtkosten"    main={`CHF ${fmt(overview.total_cost_chf, 0)}`}
+                 sub={`CHF ${fmt(metrics.cost_per_item_chf, 2)} / Einheit`} />
+        <KpiCard accent="green"  label="CO2-Emissionen"  main={`${fmt(overview.total_co2_kg)} kg`}
+                 sub={co2Saved > 0 ? `−${fmt(co2Saved)} kg vs. Vollflotte LKW` : `${fmt(metrics.co2_per_km_kg * 1000, 1)} g/km`} />
+        <KpiCard accent="amber"  label="Gesamtstrecke"   main={`${fmt(overview.total_km)} km`}
+                 sub={`Ø ${fmt(metrics.avg_km_per_route)} km / Route`} />
+        <KpiCard accent="violet" label="Fahrzeugrouten"  main={`${overview.total_last_mile_routes}`}
+                 sub={`Ø ${fmt(metrics.avg_stops_per_route)} Stops · ${fmt(metrics.total_driver_hours)} h`} />
+      </div>
+
+      {/* Fleet summary + utilization */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <Card title="Flotteneinsatz">
+          <div className="space-y-3">
+            {deliverySpecs.map((spec, i) => {
+              const stats = fleet_by_type[spec.name]
+              const util  = fleet_utilization[spec.name]
+              if (!stats) return null
+              return (
+                <div key={spec.id} className="flex items-center gap-3 p-3 rounded-lg bg-slate-800/40 border border-slate-700/40">
+                  <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: VCOL(spec.name, i) }} />
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-baseline justify-between mb-1">
+                      <span className="text-sm font-semibold text-slate-200">{spec.name}</span>
+                      {util && (
+                        <span className="text-xs text-slate-500">
+                          {util.actually_used} / {util.total_available} eingesetzt ({util.utilization_pct}%)
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex gap-4 text-xs text-slate-400">
+                      <span>{fmt(stats.total_km)} km</span>
+                      <span>CHF {fmt(stats.total_cost_chf, 0)}</span>
+                      <span>{fmt(stats.total_co2_kg)} kg CO2</span>
+                    </div>
+                    {util && (
+                      <div className="mt-1.5 h-1 bg-slate-800 rounded-full overflow-hidden">
+                        <div className="h-full rounded-full" style={{ width: `${util.utilization_pct}%`, backgroundColor: VCOL(spec.name, i) }} />
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </Card>
+
+        <Card title="Kennzahlen">
+          <div className="space-y-2">
+            {[
+              ['Durchschn. Stops / Route',  `${fmt(metrics.avg_stops_per_route)}`],
+              ['Durchschn. Distanz / Route', `${fmt(metrics.avg_km_per_route)} km`],
+              ['Kosten pro Einheit',          `CHF ${fmt(metrics.cost_per_item_chf, 2)}`],
+              ['CO2 pro km (gesamt)',         `${fmt(metrics.co2_per_km_kg * 1000, 1)} g/km`],
+              ['Gesamte Fahrstunden',         `${fmt(metrics.total_driver_hours)} h`],
+              ['Nicht zugewiesene Apotheken', `${metrics.unrouted_pharmacies}`],
+            ].map(([l, v]) => (
+              <div key={l} className="flex justify-between text-xs">
+                <span className="text-slate-500">{l}</span>
+                <span className="text-slate-300 font-medium">{v}</span>
+              </div>
+            ))}
+          </div>
+          <div className="mt-4 pt-3 border-t border-slate-800">
+            <p className="text-xs font-medium text-slate-400 mb-2">Optimierungsgewichte</p>
+            {[
+              ['Kosten',   optimization.weights.cost,        'bg-blue-500'],
+              ['Zeit',     optimization.weights.time,        'bg-amber-500'],
+              ['CO2',      optimization.weights.environment, 'bg-emerald-500'],
+            ].map(([l, v, c]) => (
+              <div key={l as string} className="flex items-center gap-2 mb-1">
+                <span className="text-xs text-slate-500 w-14">{l as string}</span>
+                <div className="flex-1 h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                  <div className={`h-full rounded-full ${c as string}`} style={{ width: `${(v as number) * 100}%` }} />
+                </div>
+                <span className="text-xs text-slate-400 w-8 text-right">{Math.round((v as number) * 100)}%</span>
+              </div>
+            ))}
+          </div>
+        </Card>
+      </div>
+    </div>
+  )
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   TAB: Fahrzeuge
+══════════════════════════════════════════════════════════════════════════ */
+function VehiclesTab({ deliverySpecs, routesByType, fleetUtil }: {
+  deliverySpecs: VehicleConfig[]
+  routesByType: Record<string, IndividualRoute[]>
+  fleetUtil: Record<string, import('../../types').FleetUtilization>
+}) {
+  return (
+    <div className="max-w-6xl mx-auto px-6 py-6 space-y-6">
+      {/* Fleet utilization overview */}
+      <Card title="Fahrzeugflotte — Auslastung" sub="eingesetzte vs. verfügbare Fahrzeuge">
+        <div className="overflow-x-auto">
+          <table className="w-full text-xs">
+            <thead>
+              <tr className="text-slate-500 border-b border-slate-800">
+                {['Typ','Eingesetzt','Verfügbar','Auslastung','Auslastungsbalken'].map(h => (
+                  <th key={h} className="pb-2 pr-4 text-left font-medium">{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-800/40">
+              {deliverySpecs.map((spec, i) => {
+                const util = fleetUtil[spec.name]
+                if (!util) return null
+                const pct = util.utilization_pct
+                return (
+                  <tr key={spec.id} className="text-slate-300">
+                    <td className="py-2.5 pr-4 font-semibold" style={{ color: VCOL(spec.name, i) }}>{spec.name}</td>
+                    <td className="py-2.5 pr-4 text-slate-200 font-medium">{util.actually_used}</td>
+                    <td className="py-2.5 pr-4 text-slate-500">{util.total_available}</td>
+                    <td className="py-2.5 pr-4">
+                      <span className={`font-medium ${pct >= 80 ? 'text-amber-400' : pct >= 50 ? 'text-blue-300' : 'text-slate-400'}`}>
+                        {pct}%
+                      </span>
+                    </td>
+                    <td className="py-2.5 w-48">
+                      <div className="h-2 bg-slate-800 rounded-full overflow-hidden">
+                        <div className="h-full rounded-full" style={{ width: `${pct}%`, backgroundColor: VCOL(spec.name, i) }} />
+                      </div>
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
+        <p className="text-xs text-slate-600 mt-3">
+          Nicht eingesetzte Fahrzeuge verursachen keine Kosten. Verfügbar = max_per_hub × Anzahl Liefer-Hubs.
+        </p>
+      </Card>
+
+      {/* Per-vehicle detail grouped by type */}
+      {deliverySpecs.map((spec, i) => {
+        const routes = routesByType[spec.name] ?? []
+        if (!routes.length) return null
+        return (
+          <VehicleTypeGroup key={spec.id} type={spec.name} routes={routes} color={VCOL(spec.name, i)} />
+        )
+      })}
+    </div>
+  )
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   TAB: Hubs
+══════════════════════════════════════════════════════════════════════════ */
+function HubsTab({ data }: { data: FullSummary }) {
+  const { metrics, supply_chain, vehicle_specs } = data
+  return (
+    <div className="max-w-5xl mx-auto px-6 py-6 space-y-6">
+      {/* Hub loads */}
+      <Card title="Lagerauslastung" sub="alle Hubs">
+        <div className="overflow-x-auto">
+          <table className="w-full text-xs">
+            <thead>
+              <tr className="text-slate-500 border-b border-slate-800">
+                {['Hub','Typ','Last / Kapazität','Auslastung','Balken'].map(h => (
+                  <th key={h} className="pb-2 pr-4 text-left font-medium">{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-800/40">
+              {metrics.hub_loads.map(h => (
+                <tr key={h.name} className="text-slate-300 hover:bg-slate-800/20">
+                  <td className="py-2 pr-4 font-medium text-slate-200">{h.name}</td>
+                  <td className="py-2 pr-4 text-slate-500 text-xs">{h.hub_type}</td>
+                  <td className="py-2 pr-4">{h.load} / {h.capacity} Einh.</td>
+                  <td className="py-2 pr-4">
+                    <span className={`font-semibold text-xs ${h.pct >= 100 ? 'text-red-400' : h.pct >= 80 ? 'text-amber-400' : 'text-emerald-400'}`}>
+                      {h.pct}%
+                    </span>
+                  </td>
+                  <td className="py-2 w-32">
+                    <div className="h-2 bg-slate-800 rounded-full overflow-hidden">
+                      <div className={`h-full rounded-full ${h.pct >= 100 ? 'bg-red-500' : h.pct >= 80 ? 'bg-amber-500' : 'bg-emerald-500'}`}
+                           style={{ width: `${Math.min(h.pct, 100)}%` }} />
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </Card>
+
+      {/* Specs table */}
+      <Card title="Fahrzeugspezifikationen">
+        <div className="overflow-x-auto">
+          <table className="w-full text-xs">
+            <thead>
+              <tr className="text-slate-500 border-b border-slate-800">
+                {['Fahrzeug','Einsatz','Kap.','Reichw.','CHF/km','CO2/km','Tempo','Fahrer/h','Stop'].map(h => (
+                  <th key={h} className="pb-2 pr-4 text-left font-medium">{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-800/40">
+              {vehicle_specs.filter(v => v.enabled).map((v, i) => (
+                <tr key={v.id} className="text-slate-300 hover:bg-slate-800/20">
+                  <td className="py-2 pr-4 font-semibold" style={{ color: VCOL(v.name, i) }}>{v.name}</td>
+                  <td className="py-2 pr-4">
+                    <span className="flex gap-1">
+                      {v.can_last_mile && <span className="px-1 rounded bg-cyan-900/40 text-cyan-300 text-xs">LM</span>}
+                      {v.can_backbone  && <span className="px-1 rounded bg-rose-900/40 text-rose-300 text-xs">BB</span>}
+                    </span>
+                  </td>
+                  <td className="py-2 pr-4">{v.capacity ?? 'unbegrenzt'}</td>
+                  <td className="py-2 pr-4">{v.range_km ? `${v.range_km} km` : '—'}</td>
+                  <td className="py-2 pr-4">CHF {v.cost_per_km}</td>
+                  <td className="py-2 pr-4">{v.co2_g_per_km} g</td>
+                  <td className="py-2 pr-4">{v.speed_kmh} km/h</td>
+                  <td className="py-2 pr-4">{v.driver_chf_h ? `CHF ${v.driver_chf_h}` : '—'}</td>
+                  <td className="py-2">{v.service_min ? `${v.service_min} min` : '—'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </Card>
+
+      {/* Supply chain hierarchy */}
+      <Card title="Lieferketten-Hierarchie" sub="HQ direktlieferung + VZ → mVZ → Apotheken">
+        <div className="space-y-2">
+          {supply_chain.hierarchy.map(vz => <VzRow key={vz.name} vz={vz} />)}
+        </div>
+      </Card>
+    </div>
+  )
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   TAB: CO2 & Umwelt
+══════════════════════════════════════════════════════════════════════════ */
+function EnvironmentTab({ data, deliverySpecs, co2Saved }: {
+  data: FullSummary; deliverySpecs: VehicleConfig[]; co2Saved: number
+}) {
+  const { overview, fleet_by_type, fleet, vehicle_specs } = data
+  const backboneSpec = vehicle_specs.find(v => v.can_backbone && !v.can_last_mile)
+  const maxCo2 = overview.total_co2_kg
+
+  return (
+    <div className="max-w-5xl mx-auto px-6 py-6 space-y-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <KpiCard accent="green" label="Gesamt-CO2"       main={`${fmt(overview.total_co2_kg)} kg`} sub="alle Fahrzeuge + Backbone" />
+        <KpiCard accent="blue"  label="CO2 / km"         main={`${fmt(data.metrics.co2_per_km_kg * 1000, 1)} g/km`} sub="gewichteter Durchschnitt" />
+        <KpiCard accent="amber" label="CO2-Einsparung"   main={co2Saved > 0 ? `${fmt(co2Saved)} kg` : 'N/A'}
+                 sub="Sprinter vs. Vollflotte LKW" />
+      </div>
+
+      {/* CO2 bars */}
+      <Card title="CO2 nach Fahrzeugtyp" sub="Anteil an Gesamtemissionen">
+        <div className="space-y-4">
+          {[...deliverySpecs, ...(backboneSpec ? [backboneSpec] : [])].map((spec, i) => {
+            const stats = spec.can_last_mile ? fleet_by_type[spec.name] : fleet.backbone
+            if (!stats) return null
+            const pct = maxCo2 > 0 ? (stats.total_co2_kg / maxCo2) * 100 : 0
+            return (
+              <div key={spec.name}>
+                <div className="flex justify-between text-xs mb-1.5">
+                  <span className="text-slate-300 flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full" style={{ backgroundColor: VCOL(spec.name, i) }}/>
+                    {spec.name}
+                  </span>
+                  <span className="text-slate-400">
+                    {fmt(stats.total_co2_kg)} kg
+                    <span className="text-slate-600 ml-2">{spec.co2_g_per_km} g/km · {fmt(stats.total_km)} km</span>
+                  </span>
+                </div>
+                <div className="h-3 bg-slate-800 rounded-full overflow-hidden">
+                  <div className="h-full rounded-full" style={{ width: `${pct}%`, backgroundColor: VCOL(spec.name, i) }} />
+                </div>
+                <div className="text-right text-xs text-slate-600 mt-0.5">{fmt(pct, 1)}%</div>
+              </div>
+            )
+          })}
+        </div>
+        {co2Saved > 0 && (
+          <div className="mt-4 text-xs text-emerald-400 bg-emerald-950/30 border border-emerald-800/30 rounded-lg px-3 py-2">
+            CO2-Einsparung durch Sprinter vs. vollständiger LKW-Flotte: <strong>{fmt(co2Saved)} kg gespart</strong>
+          </div>
+        )}
+      </Card>
+
+      {/* CO2 per vehicle type details */}
+      <Card title="CO2-Details nach Fahrzeugtyp">
+        <div className="overflow-x-auto">
+          <table className="w-full text-xs">
+            <thead>
+              <tr className="text-slate-500 border-b border-slate-800">
+                {['Fahrzeug','g CO2/km','Strecke','CO2 gesamt','Anteil','Kosten'].map(h => (
+                  <th key={h} className="pb-2 pr-4 text-left font-medium">{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-800/40">
+              {[...deliverySpecs, ...(backboneSpec ? [backboneSpec] : [])].map((spec, i) => {
+                const stats = spec.can_last_mile ? fleet_by_type[spec.name] : fleet.backbone
+                if (!stats) return null
+                const pct = maxCo2 > 0 ? (stats.total_co2_kg / maxCo2) * 100 : 0
+                return (
+                  <tr key={spec.name} className="text-slate-300 hover:bg-slate-800/20">
+                    <td className="py-2 pr-4 font-semibold" style={{ color: VCOL(spec.name, i) }}>{spec.name}</td>
+                    <td className="py-2 pr-4">{spec.co2_g_per_km} g</td>
+                    <td className="py-2 pr-4">{fmt(stats.total_km)} km</td>
+                    <td className="py-2 pr-4 font-medium">{fmt(stats.total_co2_kg)} kg</td>
+                    <td className="py-2 pr-4">{fmt(pct, 1)}%</td>
+                    <td className="py-2 text-slate-400">CHF {fmt(stats.total_cost_chf, 0)}</td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
+      </Card>
+    </div>
+  )
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   Shared sub-components
+══════════════════════════════════════════════════════════════════════════ */
 
 function Card({ title, sub, children }: { title: string; sub?: string; children: React.ReactNode }) {
   return (
@@ -312,121 +469,69 @@ function KpiCard({ label, main, sub, accent }: { label: string; main: string; su
   )
 }
 
-function FleetCard({ spec, stats, color }: { spec: VehicleConfig; stats: import('../../types').FleetStats; color: string }) {
-  return (
-    <div className="rounded-xl border border-slate-700/40 bg-slate-800/20 p-3">
-      <div className="flex items-center gap-2 mb-2.5">
-        <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: color }} />
-        <div>
-          <p className="text-xs font-semibold text-slate-200">{spec.name}</p>
-          <p className="text-xs text-slate-600">{spec.co2_g_per_km} g CO2/km</p>
-        </div>
-      </div>
-      <div className="space-y-1 text-xs">
-        <FRow l="Fahrzeuge"  v={`${stats.count}`} />
-        <FRow l="Strecke"    v={`${fmt(stats.total_km)} km`} />
-        <FRow l="Kosten"     v={`CHF ${fmt(stats.total_cost_chf, 0)}`} />
-        <FRow l="CO2"        v={`${fmt(stats.total_co2_kg)} kg`} />
-        <FRow l="Waren"      v={`${fmt(stats.total_items, 0)} Einh.`} bold />
-      </div>
-    </div>
-  )
-}
-
-function FRow({ l, v, bold }: { l: string; v: string; bold?: boolean }) {
-  return (
-    <div className="flex justify-between gap-1">
-      <span className="text-slate-500">{l}</span>
-      <span className={bold ? 'text-slate-200 font-semibold' : 'text-slate-300'}>{v}</span>
-    </div>
-  )
-}
-
-function KV({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex justify-between text-xs">
-      <span className="text-slate-500">{label}</span>
-      <span className="text-slate-400">{value}</span>
-    </div>
-  )
-}
-
-function ChainRow({ label, count, color }: { label: string; count: number; color: string }) {
-  return (
-    <div className="flex items-center justify-between">
-      <div className="flex items-center gap-2">
-        <span className={`w-2 h-2 rounded-full ${color}`}/>
-        <span className="text-slate-400">{label}</span>
-      </div>
-      <span className="text-slate-300 font-semibold">{count}</span>
-    </div>
-  )
-}
-
 function VehicleTypeGroup({ type, routes, color }: { type: string; routes: IndividualRoute[]; color: string }) {
   const [open, setOpen] = useState(true)
   const totals = {
-    km:    routes.reduce((s, r) => s + r.total_km,       0),
-    items: routes.reduce((s, r) => s + r.total_items,    0),
-    cost:  routes.reduce((s, r) => s + r.total_cost_chf, 0),
-    co2:   routes.reduce((s, r) => s + r.co2_kg,         0),
-    stops: routes.reduce((s, r) => s + r.stop_count,     0),
-    hours: routes.reduce((s, r) => s + r.total_hours,    0),
+    km:    routes.reduce((s, r) => s + r.total_km,        0),
+    items: routes.reduce((s, r) => s + r.total_items,     0),
+    cost:  routes.reduce((s, r) => s + r.total_cost_chf,  0),
+    co2:   routes.reduce((s, r) => s + r.co2_kg,          0),
+    stops: routes.reduce((s, r) => s + r.stop_count,      0),
+    hours: routes.reduce((s, r) => s + r.total_hours,     0),
+    runs:  routes.reduce((s, r) => s + r.restock_count + 1, 0),
   }
   return (
-    <div className="mb-4">
+    <Card title="">
       <button onClick={() => setOpen(o => !o)}
-              className="w-full flex items-center gap-3 py-2 text-left hover:bg-slate-800/30 rounded-lg px-2 transition-colors mb-1">
-        <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: color }} />
-        <span className="text-sm font-semibold text-slate-200">{type}</span>
-        <span className="text-xs text-slate-500">{routes.length} Fahrzeuge</span>
-        <div className="ml-auto flex items-center gap-4 text-xs text-slate-500">
-          <span>{fmt(totals.km)} km</span>
-          <span>CHF {fmt(totals.cost, 0)}</span>
+              className="w-full flex items-center gap-3 text-left -m-1 p-1 rounded-lg hover:bg-slate-800/30 transition-colors mb-2">
+        <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: color }} />
+        <span className="text-sm font-bold text-slate-200">{type}</span>
+        <span className="text-xs text-slate-500">{routes.length} Fahrzeuge · {totals.runs} Läufe gesamt</span>
+        <div className="ml-auto flex gap-4 text-xs text-slate-500">
+          <span>{fmt(totals.km)} km</span><span>CHF {fmt(totals.cost, 0)}</span>
           <span>{fmt(totals.co2)} kg CO2</span>
           <span className="text-slate-600">{open ? '▲' : '▼'}</span>
         </div>
       </button>
       {open && (
-        <div className="overflow-x-auto">
+        <div className="overflow-x-auto mt-1">
           <table className="w-full text-xs">
             <thead>
               <tr className="text-slate-600 border-b border-slate-800/60">
-                {['Fahrzeug','Hub','Stops','Waren','Strecke','Zeit','Kosten','CO2','Restock'].map(h => (
+                {['Fahrzeug-ID','Hub','Läufe','Stops','Waren','Strecke','Zeit','Kosten','CO2'].map(h => (
                   <th key={h} className="pb-1.5 pr-3 text-left font-medium">{h}</th>
                 ))}
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-800/40">
+            <tbody className="divide-y divide-slate-800/30">
               {routes.map(r => (
                 <tr key={r.vehicle_id} className="text-slate-400 hover:bg-slate-800/20 hover:text-slate-300 transition-colors">
-                  <td className="py-1.5 pr-3 font-medium text-slate-300">{r.vehicle_id}</td>
+                  <td className="py-1.5 pr-3 font-mono text-slate-300 text-xs">{r.vehicle_id}</td>
                   <td className="py-1.5 pr-3">{r.hub_name}</td>
+                  <td className="py-1.5 pr-3 font-medium text-slate-300">{r.restock_count + 1}</td>
                   <td className="py-1.5 pr-3">{r.stop_count}</td>
-                  <td className="py-1.5 pr-3">{r.total_items} Einh.</td>
+                  <td className="py-1.5 pr-3">{r.total_items}</td>
                   <td className="py-1.5 pr-3">{r.total_km} km</td>
                   <td className="py-1.5 pr-3">{r.total_hours.toFixed(1)} h</td>
                   <td className="py-1.5 pr-3 text-slate-200 font-medium">CHF {r.total_cost_chf}</td>
-                  <td className="py-1.5 pr-3">{r.co2_kg} kg</td>
-                  <td className="py-1.5">{r.restock_count > 0 ? `${r.restock_count}x` : '—'}</td>
+                  <td className="py-1.5">{r.co2_kg} kg</td>
                 </tr>
               ))}
-              {/* Summary row */}
-              <tr className="text-slate-300 font-semibold border-t border-slate-700/60 bg-slate-800/20">
-                <td className="py-1.5 pr-3 text-slate-400" colSpan={2}>Summe</td>
+              <tr className="font-semibold text-slate-300 border-t border-slate-700/60 bg-slate-800/20">
+                <td className="py-1.5 pr-3 text-slate-500" colSpan={2}>Summe</td>
+                <td className="py-1.5 pr-3">{totals.runs}</td>
                 <td className="py-1.5 pr-3">{totals.stops}</td>
-                <td className="py-1.5 pr-3">{fmt(totals.items, 0)} Einh.</td>
+                <td className="py-1.5 pr-3">{fmt(totals.items, 0)}</td>
                 <td className="py-1.5 pr-3">{fmt(totals.km)} km</td>
                 <td className="py-1.5 pr-3">{fmt(totals.hours)} h</td>
                 <td className="py-1.5 pr-3">CHF {fmt(totals.cost, 0)}</td>
-                <td className="py-1.5 pr-3">{fmt(totals.co2)} kg</td>
-                <td className="py-1.5">—</td>
+                <td className="py-1.5">{fmt(totals.co2)} kg</td>
               </tr>
             </tbody>
           </table>
         </div>
       )}
-    </div>
+    </Card>
   )
 }
 
@@ -442,7 +547,7 @@ function VzRow({ vz }: { vz: VzStats }) {
           {vz.total_pharmacies} Apotheken · {vz.mvz_count} mVZ · {fmt(vz.total_items, 0)} Einh.
         </span>
         <div className="ml-auto flex items-center gap-3 text-xs text-slate-500">
-          {vz.backbone_km      && <span>{fmt(vz.backbone_km)} km</span>}
+          {vz.backbone_km && <span>{fmt(vz.backbone_km)} km</span>}
           {vz.backbone_cost_chf && <span>CHF {fmt(vz.backbone_cost_chf, 0)}</span>}
           <span className="text-slate-600">{open ? '▲' : '▼'}</span>
         </div>

@@ -134,6 +134,12 @@ export interface HubLoad {
   pct:      number
 }
 
+export interface FleetUtilization {
+  total_available: number
+  actually_used:   number
+  utilization_pct: number
+}
+
 export interface FullSummary {
   overview: {
     total_cost_chf: number
@@ -172,5 +178,6 @@ export interface FullSummary {
     unrouted_pharmacies: number
     hub_loads: HubLoad[]
   }
+  fleet_utilization: Record<string, FleetUtilization>
   individual_routes: IndividualRoute[]
 }

@@ -139,7 +139,7 @@ export function HubRoutesPanel({ hubName, focusedVehicleId, onSelectVehicle, onC
                 </div>
                 <div className="grid grid-cols-3 gap-x-4 gap-y-1 text-xs text-slate-400 pl-5">
                   <span>{r.stop_count} Stops</span>
-                  <span>{r.total_items} Einh.</span>
+                  <span>{r.restock_count > 0 ? `${r.restock_count + 1} Läufe` : '1 Lauf'}</span>
                   <span>{r.total_km} km</span>
                   <span>CHF {r.total_cost_chf}</span>
                   <span>{r.total_hours?.toFixed(1)} h</span>

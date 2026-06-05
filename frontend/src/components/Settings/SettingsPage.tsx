@@ -161,6 +161,7 @@ export function SettingsPage() {
                 {[
                   'n_vz', 'n_mvz',
                   'vz_capacity', 'mvz_capacity',
+                  'hq_direct_radius_km',
                   'population_per_item', 'max_catchment_km', 'vz_hard_radius_km',
                   'default_demand_est',
                   'shift_start', 'shift_hours', 'traffic_factor', 'co2_shadow_chf',

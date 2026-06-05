@@ -158,8 +158,10 @@ def run_hub_placement(pharmacies: list[Pharmacy], db) -> None:
     vz_o, vz_c   = hub_hours["VZ"]
     mvz_o, mvz_c = hub_hours["mVZ"]
 
+    # HQ capacity = total demand of ALL pharmacies (all goods originate here)
+    total_demand = int(sum(float(p.demand or demand_est) for p in pharmacies))
     db.add(Hub(name=settings.hq_name, hub_type="HQ", lat=hq[0], lon=hq[1],
-               capacity=vz_capacity * max(1, len(vz_indices)),   # HQ holds stock for all VZs
+               capacity=total_demand,
                open_hour=hq_o, close_hour=hq_c))
 
     vz_list: list[tuple[str, float, float]] = []

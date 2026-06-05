@@ -335,6 +335,21 @@ def get_full_summary():
         # Capacity / load per hub for metrics
         sys_raw_full  = {c.key: c.value for c in db.query(SystemConfig).all()}
         demand_est_f  = float(sys_raw_full.get("default_demand_est", "3"))
+
+        # Fleet utilisation: how many vehicles were actually deployed vs available
+        delivery_hub_names = {r.hub_name for r in last_mile}
+        n_delivery_hubs    = len(delivery_hub_names)
+        fleet_utilization  = {}
+        for v in vehicles:
+            if not v.can_last_mile:
+                continue
+            total_avail = (v.max_per_hub or 0) * n_delivery_hubs
+            actually_used = len({r.vehicle_id for r in last_mile if r.vehicle_type == v.name})
+            fleet_utilization[v.name] = {
+                "total_available": total_avail,
+                "actually_used":   actually_used,
+                "utilization_pct": round(100 * actually_used / max(1, total_avail), 1),
+            }
         load_per_hub: dict[str, int] = defaultdict(int)
         for p in pharmacies:
             if p.hub_name:
@@ -413,6 +428,7 @@ def get_full_summary():
                     for h in sorted(all_hubs, key=lambda x: (x.hub_type, x.name))
                 ],
             },
+            "fleet_utilization": fleet_utilization,
             "individual_routes": sorted([
                 {
                     "vehicle_id":    r.vehicle_id,
