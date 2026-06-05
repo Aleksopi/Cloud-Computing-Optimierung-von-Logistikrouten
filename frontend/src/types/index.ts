@@ -113,6 +113,27 @@ export interface VzStats {
   mvz: MvzStats[]
 }
 
+export interface IndividualRoute {
+  vehicle_id:    string
+  vehicle_type:  string
+  hub_name:      string
+  stop_count:    number
+  total_km:      number
+  total_hours:   number
+  total_items:   number
+  total_cost_chf: number
+  co2_kg:        number
+  restock_count: number
+}
+
+export interface HubLoad {
+  name:     string
+  hub_type: string
+  load:     number
+  capacity: number
+  pct:      number
+}
+
 export interface FullSummary {
   overview: {
     total_cost_chf: number
@@ -142,4 +163,14 @@ export interface FullSummary {
     pharmacy_count: number
     hierarchy: VzStats[]
   }
+  metrics: {
+    avg_stops_per_route: number
+    avg_km_per_route: number
+    cost_per_item_chf: number
+    co2_per_km_kg: number
+    total_driver_hours: number
+    unrouted_pharmacies: number
+    hub_loads: HubLoad[]
+  }
+  individual_routes: IndividualRoute[]
 }

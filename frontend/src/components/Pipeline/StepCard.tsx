@@ -1,10 +1,10 @@
 import type { StepInfo } from '../../types'
 
-const STEP_META: Record<number, { title: string; desc: string; icon: string }> = {
-  1: { title: 'Hub Placement',     desc: 'VZ & mVZ platzieren',    icon: '◎' },
-  2: { title: 'Einzugsgebiete',    desc: 'Straßenbasierte Zuweisung', icon: '⬡' },
-  3: { title: 'Warenbedarf',       desc: 'Demand pro Apotheke',    icon: '◈' },
-  4: { title: 'Routenoptimierung', desc: 'Fahrzeugrouten + CO₂',   icon: '⬢' },
+const STEP_META: Record<number, { title: string; desc: string }> = {
+  1: { title: 'Hub Placement',     desc: 'VZ & mVZ platzieren'         },
+  2: { title: 'Einzugsgebiete',    desc: 'Straßenbasierte Zuweisung'   },
+  3: { title: 'Warenbedarf',       desc: 'Demand pro Apotheke'         },
+  4: { title: 'Routenoptimierung', desc: 'Fahrzeugrouten & CO2'        },
 }
 
 interface StepCardProps {

@@ -26,7 +26,9 @@ export default function App() {
 
   // Vehicle- and Pharmacy-Focus
   const [focusedVehicleId,  setFocusedVehicleId]  = useState<string | null>(null)
+  const [focusedVehicleHub, setFocusedVehicleHub] = useState<string | null>(null) // hub of focused vehicle
   const [focusedPharmacyId, setFocusedPharmacyId] = useState<number | null>(null)
+  const [focusedPharmacyHub,setFocusedPharmacyHub]= useState<string | null>(null) // hub of focused pharmacy
 
   // Vehicle types and filter
   const [vehicleTypes,      setVehicleTypes]      = useState<string[]>([])
@@ -79,7 +81,8 @@ export default function App() {
   // Reset all focused state
   const clearAll = () => {
     setSelected(null); setFocusedHub(null); setHubModalOpen(false)
-    setFocusedVehicleId(null); setFocusedPharmacyId(null)
+    setFocusedVehicleId(null); setFocusedVehicleHub(null)
+    setFocusedPharmacyId(null); setFocusedPharmacyHub(null)
   }
 
   useEffect(() => { if (status[1]?.status === 'idle') clearAll() }, [status[1]?.status])
@@ -103,12 +106,11 @@ export default function App() {
 
   const highlight: HighlightState | null = useMemo(() => {
     if (focusedVehicleId) {
-      const hubFromVehicle = focusedVehicleId.split('_')[0] ?? null
-      return { hubs: hubFromVehicle ? chainOf(hubFromVehicle) : [], pharmacyId: null, routeId: null, vehicleId: focusedVehicleId }
+      // Use stored hub name — never derive from vehicle_id string (split would mangle "VZ_1")
+      return { hubs: focusedVehicleHub ? chainOf(focusedVehicleHub) : [], pharmacyId: null, routeId: null, vehicleId: focusedVehicleId }
     }
     if (focusedPharmacyId != null) {
-      const hubName = (selected?.properties as any)?.hub_name as string | null
-      return { hubs: hubName ? chainOf(hubName) : [], pharmacyId: focusedPharmacyId, routeId: null, vehicleId: null }
+      return { hubs: focusedPharmacyHub ? chainOf(focusedPharmacyHub) : [], pharmacyId: focusedPharmacyId, routeId: null, vehicleId: null }
     }
     if (activeHubForHighlight) {
       return { hubs: chainOf(activeHubForHighlight), pharmacyId: null, routeId: null, vehicleId: null }
@@ -154,8 +156,9 @@ export default function App() {
 
   // ── Pharmacy chain button ──────────────────────────────────────────────────
   const handlePharmacyChain = (pharmacyId: number, hubName: string) => {
-    setFocusedHub(hubName)          // show only this hub's routes
-    setFocusedPharmacyId(pharmacyId) // show only this pharmacy's assignment
+    setFocusedHub(hubName)
+    setFocusedPharmacyId(pharmacyId)
+    setFocusedPharmacyHub(hubName)  // store for highlight chain
     setSelected(null)
   }
 
@@ -245,25 +248,18 @@ export default function App() {
                 <span className="w-2 h-2 rounded-full bg-blue-400 animate-pulse flex-shrink-0" />
                 <span className="text-slate-200 font-medium truncate">
                   {focusedVehicleId
-                    ? `Fahrzeug: ${focusedVehicleId.split('_').slice(1).join(' ')}`
+                    ? `Fahrzeug aktiv: ${focusedVehicleId}`
                     : focusedPharmacyId != null
-                      ? `Lieferkette Apotheke #${focusedPharmacyId}`
-                      : `Hub: ${focusedHub}`
+                      ? `Lieferkette — Apotheke #${focusedPharmacyId}`
+                      : `Routenfilter: ${focusedHub}`
                   }
                 </span>
                 {/* Reopen modal button */}
-                {focusedVehicleId && hubModalName && (
+                {hubModalName && (focusedVehicleId || hubModalName === focusedHub) && (
                   <button onClick={() => setHubModalOpen(true)}
                           className="text-blue-300 hover:text-blue-200 flex-shrink-0 px-2 py-0.5 rounded
-                                     border border-blue-600/40 hover:border-blue-500 transition-colors">
-                    📋 Übersicht
-                  </button>
-                )}
-                {focusedHub && !focusedVehicleId && hubModalName === focusedHub && (
-                  <button onClick={() => setHubModalOpen(true)}
-                          className="text-blue-300 hover:text-blue-200 flex-shrink-0 px-2 py-0.5 rounded
-                                     border border-blue-600/40 hover:border-blue-500 transition-colors">
-                    📋 Übersicht
+                                     border border-blue-600/40 hover:border-blue-500 transition-colors text-xs">
+                    Übersicht
                   </button>
                 )}
                 <button onClick={clearAll}
@@ -300,7 +296,8 @@ export default function App() {
           focusedVehicleId={focusedVehicleId}
           onSelectVehicle={vehicleId => {
             setFocusedVehicleId(vehicleId)
-            setFocusedHub(hubModalName) // keep hub context
+            setFocusedVehicleHub(hubModalName)  // store hub so chainOf works correctly
+            setFocusedHub(hubModalName)
           }}
           onClose={() => setHubModalOpen(false)}
         />

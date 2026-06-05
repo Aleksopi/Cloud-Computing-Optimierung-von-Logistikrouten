@@ -307,6 +307,9 @@ export function MapView({
   useEffect(() => { applyFilter() }, [applyFilter])
 
   // ── Highlight / dimming ────────────────────────────────────────────────────
+  const ASSIGN_COLOR_EXPR: any = ['case',
+    ['==', ['slice', ['get', 'hub_name'], 0, 2], 'VZ'], COLORS.assignmentVz, COLORS.assignmentMvz]
+
   const highlightRef = useRef(highlight); highlightRef.current = highlight
   const applyHighlight = useCallback(() => {
     const map = mapRef.current
@@ -316,38 +319,86 @@ export function MapView({
       if (map.getLayer(layer)) map.setPaintProperty(layer, prop, val)
     }
 
-    const inactive = !h || (h.hubs.length === 0 && h.routeId == null && h.pharmacyId == null)
+    const inactive = !h || (h.hubs.length === 0 && h.routeId == null && h.pharmacyId == null && !h.vehicleId)
     if (inactive) {
-      set('routes-layer', 'line-opacity', 0.9); set('routes-layer', 'line-width', 3)
-      set('backbone-hq-vz-layer', 'line-opacity', 0.85)
+      set('routes-layer',          'line-opacity', 0.9);  set('routes-layer', 'line-width', 3)
+      set('backbone-hq-vz-layer',  'line-opacity', 0.85)
       set('backbone-vz-mvz-layer', 'line-opacity', 0.8)
-      set('assignments-layer', 'line-opacity', 0.35)
-      set('pharmacies-layer', 'circle-opacity', 1); set('pharmacies-layer', 'circle-stroke-opacity', 1)
-      set('hubs-layer', 'circle-opacity', 1); set('hubs-layer', 'circle-stroke-opacity', 1)
-      set('hubs-labels', 'text-opacity', 1)
+      set('assignments-layer',     'line-color',   ASSIGN_COLOR_EXPR)
+      set('assignments-layer',     'line-width',   1.2)
+      set('assignments-layer',     'line-opacity', 0.35)
+      set('pharmacies-layer',      'circle-opacity', 1); set('pharmacies-layer', 'circle-stroke-opacity', 1)
+      set('hubs-layer',            'circle-opacity', 1); set('hubs-layer', 'circle-stroke-opacity', 1)
+      set('hubs-labels',           'text-opacity', 1)
       return
     }
 
     const hubs = h.hubs
-    const inHubs = (key: string) => ['in', ['get', key], ['literal', hubs]]
-    // backbone relevant if from_hub in chain OR any chain hub is a stop
+    const inHubs = (key: string): any => ['in', ['get', key], ['literal', hubs]]
     const bbRelevant: any = ['any', inHubs('from_hub'), ...hubs.map(hn => ['in', hn, ['get', 'to_hubs']])]
+
+    // ── Focused vehicle: route already filtered → just make it prominent ───
+    if (h.vehicleId) {
+      set('routes-layer', 'line-opacity', 1.0)
+      set('routes-layer', 'line-width', 5)
+      // Show backbone chain, dim others
+      if (hubs.length) {
+        set('backbone-hq-vz-layer',  'line-opacity', ['case', bbRelevant, 0.9, DIM])
+        set('backbone-vz-mvz-layer', 'line-opacity', ['case', bbRelevant, 0.85, DIM])
+        set('assignments-layer',     'line-color',   ASSIGN_COLOR_EXPR)
+        set('assignments-layer',     'line-width',   1.2)
+        set('assignments-layer',     'line-opacity', ['case', inHubs('hub_name'), 0.5, DIM])
+        const hubMatch: any = ['case', inHubs('name'), 1, 0.2]
+        set('pharmacies-layer', 'circle-opacity', ['case', inHubs('hub_name'), 0.8, 0.1])
+        set('pharmacies-layer', 'circle-stroke-opacity', ['case', inHubs('hub_name'), 0.8, 0.1])
+        set('hubs-layer',  'circle-opacity',       hubMatch)
+        set('hubs-layer',  'circle-stroke-opacity', hubMatch)
+        set('hubs-labels', 'text-opacity',          hubMatch)
+      }
+      return
+    }
+
+    // ── Pharmacy chain: amber assignment + route for this hub ──────────────
+    if (h.pharmacyId != null) {
+      // Assignment line: amber highlight — visually distinct from routes
+      set('assignments-layer', 'line-color',   '#f59e0b')  // amber
+      set('assignments-layer', 'line-width',   3.5)
+      set('assignments-layer', 'line-opacity', 0.95)
+      // Routes: show hub routes in their normal colors
+      if (hubs.length) {
+        set('routes-layer', 'line-opacity', ['case', inHubs('hub_name'), 0.9, DIM])
+        set('routes-layer', 'line-width',   ['case', inHubs('hub_name'), 3.5, 2])
+      }
+      set('backbone-hq-vz-layer',  'line-opacity', ['case', bbRelevant, 0.9, DIM])
+      set('backbone-vz-mvz-layer', 'line-opacity', ['case', bbRelevant, 0.85, DIM])
+      // Highlight only this pharmacy
+      set('pharmacies-layer', 'circle-opacity', ['case', ['==', ['get', 'id'], h.pharmacyId], 1.0, 0.1])
+      set('pharmacies-layer', 'circle-stroke-opacity', ['case', ['==', ['get', 'id'], h.pharmacyId], 1.0, 0.1])
+      if (hubs.length) {
+        const hubMatch: any = ['case', inHubs('name'), 1, 0.22]
+        set('hubs-layer',  'circle-opacity',       hubMatch)
+        set('hubs-layer',  'circle-stroke-opacity', hubMatch)
+        set('hubs-labels', 'text-opacity',          hubMatch)
+      }
+      return
+    }
+
+    // ── Hub / backbone highlight ───────────────────────────────────────────
+    set('assignments-layer', 'line-color',   ASSIGN_COLOR_EXPR)  // restore data-driven color
+    set('assignments-layer', 'line-width',   1.2)
 
     if (h.routeId != null) {
       set('routes-layer', 'line-opacity', ['case', ['==', ['get', 'id'], h.routeId], 0.95, DIM])
-      set('routes-layer', 'line-width', ['case', ['==', ['get', 'id'], h.routeId], 6, 2.5])
+      set('routes-layer', 'line-width',   ['case', ['==', ['get', 'id'], h.routeId], 6, 2.5])
     } else if (hubs.length) {
       set('routes-layer', 'line-opacity', ['case', inHubs('hub_name'), 0.95, DIM])
-      set('routes-layer', 'line-width', ['case', inHubs('hub_name'), 4, 2.5])
+      set('routes-layer', 'line-width',   ['case', inHubs('hub_name'), 4, 2.5])
     }
 
-    set('backbone-hq-vz-layer', 'line-opacity', ['case', bbRelevant, 0.95, DIM])
+    set('backbone-hq-vz-layer',  'line-opacity', ['case', bbRelevant, 0.95, DIM])
     set('backbone-vz-mvz-layer', 'line-opacity', ['case', bbRelevant, 0.9, DIM])
 
-    if (h.pharmacyId != null)
-      set('assignments-layer', 'line-opacity', ['case', ['==', ['get', 'pharmacy_id'], h.pharmacyId], 0.9, DIM])
-    else
-      set('assignments-layer', 'line-opacity', hubs.length ? ['case', inHubs('hub_name'), 0.7, DIM] : 0.35)
+    set('assignments-layer', 'line-opacity', hubs.length ? ['case', inHubs('hub_name'), 0.7, DIM] : 0.35)
 
     const phMatch: any = hubs.length ? ['case', inHubs('hub_name'), 1, 0.12] : 1
     set('pharmacies-layer', 'circle-opacity', phMatch)

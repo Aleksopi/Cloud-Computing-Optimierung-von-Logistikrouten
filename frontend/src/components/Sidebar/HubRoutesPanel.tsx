@@ -94,7 +94,7 @@ export function HubRoutesPanel({ hubName, focusedVehicleId, onSelectVehicle, onC
 
         {/* Instruction */}
         <div className="px-5 py-2.5 text-xs text-slate-500 bg-slate-900 border-b border-slate-700/30 flex-shrink-0">
-          Fahrzeug anklicken → nur diese Route auf der Karte · Popup schließt sich automatisch
+          Fahrzeug anklicken — nur diese Route auf der Karte — Popup schließt automatisch
         </div>
 
         {/* Vehicle list */}
@@ -138,12 +138,12 @@ export function HubRoutesPanel({ hubName, focusedVehicleId, onSelectVehicle, onC
                   )}
                 </div>
                 <div className="grid grid-cols-3 gap-x-4 gap-y-1 text-xs text-slate-400 pl-5">
-                  <span className="flex items-center gap-1"><span>📍</span>{r.stop_count} Stops</span>
-                  <span className="flex items-center gap-1"><span>📦</span>{r.total_items} Einh.</span>
-                  <span className="flex items-center gap-1"><span>📏</span>{r.total_km} km</span>
-                  <span className="flex items-center gap-1"><span>💰</span>CHF {r.total_cost_chf}</span>
-                  <span className="flex items-center gap-1"><span>⏱</span>{r.total_hours?.toFixed(1)} h</span>
-                  {r.co2_kg != null && <span className="flex items-center gap-1"><span>🌱</span>{r.co2_kg} kg</span>}
+                  <span>{r.stop_count} Stops</span>
+                  <span>{r.total_items} Einh.</span>
+                  <span>{r.total_km} km</span>
+                  <span>CHF {r.total_cost_chf}</span>
+                  <span>{r.total_hours?.toFixed(1)} h</span>
+                  {r.co2_kg != null && <span>{r.co2_kg} kg CO2</span>}
                 </div>
               </button>
             )

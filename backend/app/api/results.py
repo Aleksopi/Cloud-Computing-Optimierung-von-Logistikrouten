@@ -69,15 +69,20 @@ def get_hubs():
             s["total_items"] += r.total_items or 0
             s["total_km"]    += r.total_km or 0
 
-        # Current goods load per hub (sum of assigned pharmacy demand)
+        # Current goods load: use actual demand if known, else configured estimate
+        sys_raw = {c.key: c.value for c in db.query(SystemConfig).all()}
+        demand_est = float(sys_raw.get("default_demand_est", "3"))
+        all_pharmacies = db.query(Pharmacy).all()
+        has_actual_demand = any(p.demand is not None for p in all_pharmacies)
+
         load: dict[str, int] = defaultdict(int)
         pharm_count: dict[str, int] = defaultdict(int)
-        for p in db.query(Pharmacy).all():
+        for p in all_pharmacies:
             if p.hub_name:
-                load[p.hub_name] += int(p.demand or 0)
+                effective = p.demand if p.demand is not None else demand_est
+                load[p.hub_name] += int(effective)
                 pharm_count[p.hub_name] += 1
 
-        sys_raw = {c.key: c.value for c in db.query(SystemConfig).all()}
         shift_h = float(sys_raw.get("shift_hours", "8.0"))
         start = datetime.time(8, 0)
         end   = datetime.time(min(8 + int(shift_h), 23), 0)
@@ -98,14 +103,15 @@ def get_hubs():
                         "load":            load.get(h.name, 0),
                         "pharmacy_count":  pharm_count.get(h.name, 0),
                         # Route stats (available after Step 4)
-                        "vehicle_counts":  route_stats[h.name]["vehicle_counts"],
-                        "total_items":     route_stats[h.name]["total_items"],
-                        "total_km":        round(route_stats[h.name]["total_km"], 1),
-                        "delivery_window": delivery_window,
-                        "open_hour":       h.open_hour,
-                        "close_hour":      h.close_hour,
-                        "opening_hours":   f"{_fmt_hour(h.open_hour)} – {_fmt_hour(h.close_hour)}"
-                                           if h.open_hour is not None else None,
+                        "vehicle_counts":   route_stats[h.name]["vehicle_counts"],
+                        "total_items":      route_stats[h.name]["total_items"],
+                        "total_km":         round(route_stats[h.name]["total_km"], 1),
+                        "delivery_window":  delivery_window,
+                        "open_hour":        h.open_hour,
+                        "close_hour":       h.close_hour,
+                        "opening_hours":    f"{_fmt_hour(h.open_hour)} – {_fmt_hour(h.close_hour)}"
+                                            if h.open_hour is not None else None,
+                        "load_estimated":   not has_actual_demand,
                     },
                 }
                 for h in rows
@@ -326,10 +332,24 @@ def get_full_summary():
                 })
             hierarchy.append(vz_stat)
 
+        # Capacity / load per hub for metrics
+        sys_raw_full  = {c.key: c.value for c in db.query(SystemConfig).all()}
+        demand_est_f  = float(sys_raw_full.get("default_demand_est", "3"))
+        load_per_hub: dict[str, int] = defaultdict(int)
+        for p in pharmacies:
+            if p.hub_name:
+                load_per_hub[p.hub_name] += int(p.demand if p.demand is not None else demand_est_f)
+
+        total_lm_km   = sum(r.total_km or 0 for r in last_mile)
+        total_lm_cost = sum(r.total_cost_chf or 0 for r in last_mile)
+        total_lm_items = sum(r.total_items or 0 for r in last_mile)
+        total_lm_stops = sum(len(r.stops or []) for r in last_mile)
+        total_all_co2  = sum(r.co2_kg or 0 for r in all_routes)
+
         return {
             "overview": {
                 "total_cost_chf":          round(sum(r.total_cost_chf or 0 for r in all_routes), 2),
-                "total_co2_kg":            round(sum(r.co2_kg or 0 for r in all_routes), 2),
+                "total_co2_kg":            round(total_all_co2, 2),
                 "total_km":                round(sum(r.total_km or 0 for r in all_routes), 2),
                 "total_last_mile_routes":  len(last_mile),
                 "pharmacies_total":        len(pharmacies),
@@ -374,6 +394,40 @@ def get_full_summary():
                 "pharmacy_count": len(pharmacies),
                 "hierarchy":      hierarchy,
             },
+            "metrics": {
+                "avg_stops_per_route":   round(total_lm_stops / max(1, len(last_mile)), 1),
+                "avg_km_per_route":      round(total_lm_km    / max(1, len(last_mile)), 1),
+                "cost_per_item_chf":     round(total_lm_cost  / max(1, total_lm_items), 2),
+                "co2_per_km_kg":         round(total_all_co2  / max(1, sum(r.total_km or 0 for r in all_routes)), 4),
+                "total_driver_hours":    round(sum(r.total_hours or 0 for r in last_mile), 1),
+                "unrouted_pharmacies":   sum(1 for p in pharmacies if not p.hub_name),
+                "hub_loads": [
+                    {
+                        "name":     h.name,
+                        "hub_type": h.hub_type,
+                        "load":     load_per_hub.get(h.name, 0),
+                        "capacity": h.capacity or 0,
+                        "pct":      round(100 * load_per_hub.get(h.name, 0) / h.capacity, 1)
+                                    if h.capacity else 0,
+                    }
+                    for h in sorted(all_hubs, key=lambda x: (x.hub_type, x.name))
+                ],
+            },
+            "individual_routes": sorted([
+                {
+                    "vehicle_id":    r.vehicle_id,
+                    "vehicle_type":  r.vehicle_type,
+                    "hub_name":      r.hub_name,
+                    "stop_count":    len(r.stops or []),
+                    "total_km":      round(r.total_km or 0, 2),
+                    "total_hours":   round(r.total_hours or 0, 2),
+                    "total_items":   r.total_items or 0,
+                    "total_cost_chf": round(r.total_cost_chf or 0, 2),
+                    "co2_kg":        round(r.co2_kg or 0, 3),
+                    "restock_count": r.restock_count or 0,
+                }
+                for r in last_mile
+            ], key=lambda x: (x["vehicle_type"], x["hub_name"], x["vehicle_id"])),
         }
     finally:
         db.close()
