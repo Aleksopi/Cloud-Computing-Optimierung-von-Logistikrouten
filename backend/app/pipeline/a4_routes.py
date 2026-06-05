@@ -108,6 +108,14 @@ def _solve_vrp(
                     drive_h = (d_to / speed) * opt["traffic_factor"]
                     if hours_used + drive_h + svc_min / 60.0 > opt["shift_hours"]:
                         continue
+                    # ── Opening-hours constraint ───────────────────────────
+                    arrival_h  = opt.get("shift_start", 8.0) + hours_used + drive_h
+                    stop_open  = stop.get("open_hour",  0.0)
+                    stop_close = stop.get("close_hour", 24.0)
+                    if stop_open  > 0.0  and arrival_h < stop_open:
+                        continue   # arrives before opening (no waiting in model)
+                    if stop_close < 24.0 and arrival_h + svc_min / 60.0 > stop_close:
+                        continue   # service would exceed closing time
                     score = _composite_score(d_to, cost_km, co2_g_km, speed, driver_h, svc_min, opt)
                     if score < best_score:
                         best_score, best_idx, best_d = score, idx, d_to
@@ -186,6 +194,7 @@ def run_routes(db) -> None:
     sys_raw = {c.key: float(c.value) for c in db.query(SystemConfig).all()}
     opt = {
         "shift_hours":    sys_raw.get("shift_hours",     8.0),
+        "shift_start":    sys_raw.get("shift_start",     8.0),
         "weight_cost":    sys_raw.get("opt_weight_cost", 0.40),
         "weight_time":    sys_raw.get("opt_weight_time", 0.35),
         "weight_env":     sys_raw.get("opt_weight_env",  0.25),
@@ -207,6 +216,8 @@ def run_routes(db) -> None:
             "lat":        float(h.lat),
             "lon":        float(h.lon),
             "parent_hub": h.parent_hub,
+            "open_hour":  float(h.open_hour  or 0.0),
+            "close_hour": float(h.close_hour or 24.0),
         }
         for h in db.query(Hub).all()
     }
@@ -219,7 +230,11 @@ def run_routes(db) -> None:
         p = pharmacies.get(a.pharmacy_id)
         if p:
             d = int(p.demand or 1)
-            hub_stops[a.hub_name].append({"id": p.id, "lat": float(p.lat), "lon": float(p.lon), "demand": d})
+            hub_stops[a.hub_name].append({
+                "id": p.id, "lat": float(p.lat), "lon": float(p.lon), "demand": d,
+                "open_hour":  float(p.open_hour  or 0.0),
+                "close_hour": float(p.close_hour or 24.0),
+            })
             hub_demand[a.hub_name] += d
 
     db.query(VehicleRoute).delete()

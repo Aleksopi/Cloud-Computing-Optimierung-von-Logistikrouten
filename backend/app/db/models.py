@@ -16,6 +16,8 @@ class Pharmacy(Base):
     lon = Column(Float, nullable=False)
     demand = Column(Integer, nullable=True)
     hub_name = Column(String, nullable=True)
+    open_hour  = Column(Float, nullable=True)   # e.g. 8.0 = 08:00
+    close_hour = Column(Float, nullable=True)   # e.g. 18.5 = 18:30
 
 
 class Hub(Base):
@@ -26,7 +28,9 @@ class Hub(Base):
     lat = Column(Float, nullable=False)
     lon = Column(Float, nullable=False)
     parent_hub = Column(String, nullable=True)  # mVZ → nearest VZ name
-    capacity = Column(Integer, nullable=True)   # warehouse capacity in goods units
+    capacity   = Column(Integer, nullable=True) # warehouse capacity in goods units
+    open_hour  = Column(Float,   nullable=True) # e.g. 7.0 = 07:00
+    close_hour = Column(Float,   nullable=True) # e.g. 20.0 = 20:00
 
 
 class Assignment(Base):

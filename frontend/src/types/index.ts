@@ -16,9 +16,10 @@ export interface SelectedFeature {
 
 /** Drives map dimming: only related features stay opaque. */
 export interface HighlightState {
-  hubs: string[]            // relevant hub names (the chain)
-  pharmacyId: number | null // highlight a single assignment line
-  routeId: number | null    // highlight a single vehicle route
+  hubs: string[]              // relevant hub names (the chain)
+  pharmacyId: number | null   // highlight a single assignment line
+  routeId: number | null      // highlight a single vehicle route (numeric id)
+  vehicleId: string | null    // highlight/filter a single vehicle_id string
 }
 
 export interface RouteSummary {

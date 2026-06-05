@@ -42,6 +42,16 @@ DEFAULT_SYSTEM_CONFIG = [
     ("vz_capacity",         "320",    "VZ-Lagerkapazität (Einheiten)",     "Max. Warenmenge je Verteilzentrum"),
     ("mvz_capacity",        "90",     "mVZ-Lagerkapazität (Einheiten)",    "Max. Warenmenge je Mini-Verteilzentrum"),
     ("default_demand_est",  "3",      "Bedarfsschätzung pro Apotheke",     "Proxy für Kapazitätsprüfung vor Step 3"),
+    # Öffnungszeiten (Stunden, z.B. 8.5 = 08:30)
+    ("shift_start",         "8.0",    "Schichtbeginn (Stunden)",           "Startzeit der Lieferschicht"),
+    ("pharmacy_open_hour",  "8.0",    "Apotheke Öffnung (Stunden)",        "Standard-Öffnungszeit für alle Apotheken"),
+    ("pharmacy_close_hour", "18.5",   "Apotheke Schluss (Stunden)",        "Standard-Schließzeit für alle Apotheken"),
+    ("hub_hq_open",         "6.0",    "HQ Öffnung (Stunden)",              "Öffnungszeit Hauptquartier"),
+    ("hub_hq_close",        "22.0",   "HQ Schluss (Stunden)",              "Schließzeit Hauptquartier"),
+    ("hub_vz_open",         "7.0",    "VZ Öffnung (Stunden)",              "Öffnungszeit Verteilzentrum"),
+    ("hub_vz_close",        "20.0",   "VZ Schluss (Stunden)",              "Schließzeit Verteilzentrum"),
+    ("hub_mvz_open",        "8.0",    "mVZ Öffnung (Stunden)",             "Öffnungszeit Mini-Verteilzentrum"),
+    ("hub_mvz_close",       "18.0",   "mVZ Schluss (Stunden)",             "Schließzeit Mini-Verteilzentrum"),
 ]
 
 
@@ -63,6 +73,7 @@ def init_db():
 
         _ensure_vehicles(db)
         _ensure_system_config(db)
+        _apply_default_pharmacy_hours(db)
     finally:
         db.close()
 
@@ -72,6 +83,10 @@ def _migrate_columns():
     migrations = [
         "ALTER TABLE hubs ADD COLUMN IF NOT EXISTS parent_hub VARCHAR",
         "ALTER TABLE hubs ADD COLUMN IF NOT EXISTS capacity INTEGER",
+        "ALTER TABLE hubs ADD COLUMN IF NOT EXISTS open_hour DOUBLE PRECISION",
+        "ALTER TABLE hubs ADD COLUMN IF NOT EXISTS close_hour DOUBLE PRECISION",
+        "ALTER TABLE pharmacies ADD COLUMN IF NOT EXISTS open_hour DOUBLE PRECISION",
+        "ALTER TABLE pharmacies ADD COLUMN IF NOT EXISTS close_hour DOUBLE PRECISION",
         "ALTER TABLE vehicle_routes ADD COLUMN IF NOT EXISTS supply_tier VARCHAR",
         "ALTER TABLE vehicle_routes ADD COLUMN IF NOT EXISTS co2_kg DOUBLE PRECISION",
         "ALTER TABLE vehicle_fleet_configs ADD COLUMN IF NOT EXISTS can_last_mile BOOLEAN DEFAULT FALSE",
@@ -84,6 +99,20 @@ def _migrate_columns():
         logger.info("[init_db] Column migrations applied")
     except Exception as e:
         logger.warning(f"[init_db] Migration warning (non-fatal): {e}")
+
+
+def _apply_default_pharmacy_hours(db):
+    """Set default opening hours on pharmacies that don't have any yet (idempotent)."""
+    sys_raw = {c.key: c.value for c in db.query(SystemConfig).all()}
+    ph_open  = float(sys_raw.get("pharmacy_open_hour",  "8.0"))
+    ph_close = float(sys_raw.get("pharmacy_close_hour", "18.5"))
+    rows = db.query(Pharmacy).filter(Pharmacy.open_hour == None).all()  # noqa: E711
+    for p in rows:
+        p.open_hour  = ph_open
+        p.close_hour = ph_close
+    if rows:
+        db.commit()
+        logger.info(f"[init_db] Applied default opening hours to {len(rows)} pharmacies")
 
 
 def _ensure_vehicles(db):

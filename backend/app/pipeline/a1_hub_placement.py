@@ -91,6 +91,12 @@ def run_hub_placement(pharmacies: list[Pharmacy], db) -> None:
     vz_capacity   = int(float(sys_raw.get("vz_capacity",  "320")))
     mvz_capacity  = int(float(sys_raw.get("mvz_capacity", "90")))
     demand_est    = float(sys_raw.get("default_demand_est", "3"))
+    # Hub opening hours from config
+    hub_hours = {
+        "HQ":  (float(sys_raw.get("hub_hq_open",  "6.0")),  float(sys_raw.get("hub_hq_close",  "22.0"))),
+        "VZ":  (float(sys_raw.get("hub_vz_open",  "7.0")),  float(sys_raw.get("hub_vz_close",  "20.0"))),
+        "mVZ": (float(sys_raw.get("hub_mvz_open", "8.0")),  float(sys_raw.get("hub_mvz_close", "18.0"))),
+    }
 
     def est_demand(p) -> float:
         return float(p.demand) if p.demand else demand_est
@@ -130,17 +136,23 @@ def run_hub_placement(pharmacies: list[Pharmacy], db) -> None:
         hq_idx=hq_idx,
     )
 
-    # Persist hubs (with configurable warehouse capacity per type)
+    # Persist hubs (with configurable warehouse capacity + opening hours)
     db.query(Hub).delete()
     db.commit()
+    hq_o, hq_c   = hub_hours["HQ"]
+    vz_o, vz_c   = hub_hours["VZ"]
+    mvz_o, mvz_c = hub_hours["mVZ"]
+
     db.add(Hub(name=settings.hq_name, hub_type="HQ", lat=hq[0], lon=hq[1],
-               capacity=vz_capacity * max(1, len(vz_indices))))
+               capacity=vz_capacity * max(1, len(vz_indices)),
+               open_hour=hq_o, close_hour=hq_c))
 
     vz_list: list[tuple[str, float, float]] = []
     for i, vidx in enumerate(vz_indices, 1):
         lat, lon = all_coords[vidx]
         name = f"VZ_{i}"
-        db.add(Hub(name=name, hub_type="VZ", lat=round(lat, 6), lon=round(lon, 6), capacity=vz_capacity))
+        db.add(Hub(name=name, hub_type="VZ", lat=round(lat, 6), lon=round(lon, 6),
+                   capacity=vz_capacity, open_hour=vz_o, close_hour=vz_c))
         vz_list.append((name, lat, lon))
         logger.info(f"  {name} → ({lat:.4f}, {lon:.4f})")
 
@@ -148,7 +160,8 @@ def run_hub_placement(pharmacies: list[Pharmacy], db) -> None:
     for i, midx in enumerate(mini_vz_indices, 1):
         lat, lon = all_coords[midx]
         name = f"mVZ_{i}"
-        db.add(Hub(name=name, hub_type="mVZ", lat=round(lat, 6), lon=round(lon, 6), capacity=mvz_capacity))
+        db.add(Hub(name=name, hub_type="mVZ", lat=round(lat, 6), lon=round(lon, 6),
+                   capacity=mvz_capacity, open_hour=mvz_o, close_hour=mvz_c))
         mini_list.append((name, lat, lon))
         logger.info(f"  {name} → ({lat:.4f}, {lon:.4f})")
 

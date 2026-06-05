@@ -18,17 +18,27 @@ export default function App() {
 
   const [selected,          setSelected]          = useState<SelectedFeature | null>(null)
   const [view,              setView]              = useState<View>('map')
+
+  // Hub-Focus-State
   const [focusedHub,        setFocusedHub]        = useState<string | null>(null)
-  const [hubPanel,          setHubPanel]          = useState<string | null>(null)
-  const [selectedRouteId,   setSelectedRouteId]   = useState<number | null>(null)
+  const [hubModalOpen,      setHubModalOpen]      = useState(false)
+  const [hubModalName,      setHubModalName]      = useState<string | null>(null)
+
+  // Vehicle- and Pharmacy-Focus
+  const [focusedVehicleId,  setFocusedVehicleId]  = useState<string | null>(null)
+  const [focusedPharmacyId, setFocusedPharmacyId] = useState<number | null>(null)
+
+  // Vehicle types and filter
   const [vehicleTypes,      setVehicleTypes]      = useState<string[]>([])
   const [vehicleTypeFilter, setVehicleTypeFilter] = useState<Set<string>>(new Set())
+
+  // Hub hierarchy for supply-chain highlight
   const [hubMap,            setHubMap]            = useState<Map<string, HubInfo>>(new Map())
   const [visibleLayers, setVisibleLayers] = useState(
     () => new Set(['pharmacies', 'hubs', 'assignments', 'backbone', 'routes']),
   )
 
-  // Last-mile vehicle types (for the route filter UI)
+  // Load delivery vehicle types
   useEffect(() => {
     api.getVehicles()
       .then(vs => {
@@ -39,7 +49,7 @@ export default function App() {
       .catch(() => { setVehicleTypes(['Sprinter', 'Klein-LKW']); setVehicleTypeFilter(new Set(['Sprinter', 'Klein-LKW'])) })
   }, [])
 
-  // Hub hierarchy (for supply-chain highlight) — refetched when Step 1 completes
+  // Hub hierarchy for chain highlight
   const step1Key = status[1]?.finished_at ?? status[1]?.status
   useEffect(() => {
     if (status[1]?.status !== 'done') { setHubMap(new Map()); return }
@@ -66,12 +76,13 @@ export default function App() {
     })
   }
 
-  // Reset transient state when pipeline resets
-  useEffect(() => {
-    if (status[1]?.status === 'idle') {
-      setFocusedHub(null); setHubPanel(null); setSelectedRouteId(null); setSelected(null)
-    }
-  }, [status[1]?.status])
+  // Reset all focused state
+  const clearAll = () => {
+    setSelected(null); setFocusedHub(null); setHubModalOpen(false)
+    setFocusedVehicleId(null); setFocusedPharmacyId(null)
+  }
+
+  useEffect(() => { if (status[1]?.status === 'idle') clearAll() }, [status[1]?.status])
 
   // ── Supply-chain highlight derivation ──────────────────────────────────────
   const chainOf = (name: string): string[] => {
@@ -85,25 +96,68 @@ export default function App() {
         .filter(([, v]) => v.type === 'mVZ' && v.parent === name).map(([k]) => k)
       return [name, ...hq, ...children]
     }
-    return [name, ...(info.parent ? [info.parent] : []), ...hq]  // mVZ
+    return [name, ...(info.parent ? [info.parent] : []), ...hq]
   }
 
+  const activeHubForHighlight = focusedHub ?? (selected?.type === 'hub' ? (selected.properties.name as string) : null)
+
   const highlight: HighlightState | null = useMemo(() => {
-    if (hubPanel) {
-      return { hubs: chainOf(hubPanel), pharmacyId: null, routeId: selectedRouteId }
+    if (focusedVehicleId) {
+      const hubFromVehicle = focusedVehicleId.split('_')[0] ?? null
+      return { hubs: hubFromVehicle ? chainOf(hubFromVehicle) : [], pharmacyId: null, routeId: null, vehicleId: focusedVehicleId }
     }
-    if (!selected) return null
-    const p = selected.properties as any
-    if (selected.type === 'hub')      return { hubs: chainOf(p.name), pharmacyId: null, routeId: null }
-    if (selected.type === 'pharmacy') return { hubs: p.hub_name ? chainOf(p.hub_name) : [], pharmacyId: p.id ?? null, routeId: null }
-    // route
-    if (p.backbone_tier) {
-      let to: string[] = []
-      try { to = typeof p.to_hubs === 'string' ? JSON.parse(p.to_hubs) : (p.to_hubs ?? []) } catch { /* */ }
-      return { hubs: [p.from_hub, ...to].filter(Boolean), pharmacyId: null, routeId: null }
+    if (focusedPharmacyId != null) {
+      const hubName = (selected?.properties as any)?.hub_name as string | null
+      return { hubs: hubName ? chainOf(hubName) : [], pharmacyId: focusedPharmacyId, routeId: null, vehicleId: null }
     }
-    return { hubs: p.hub_name ? [p.hub_name] : [], pharmacyId: null, routeId: p.id ?? null }
-  }, [selected, hubPanel, selectedRouteId, hubMap])
+    if (activeHubForHighlight) {
+      return { hubs: chainOf(activeHubForHighlight), pharmacyId: null, routeId: null, vehicleId: null }
+    }
+    if (selected?.type === 'pharmacy') {
+      const p = selected.properties as any
+      return { hubs: p.hub_name ? chainOf(p.hub_name) : [], pharmacyId: (p.id as number) ?? null, routeId: null, vehicleId: null }
+    }
+    if (selected?.type === 'route') {
+      const p = selected.properties as any
+      if (p.backbone_tier) {
+        let to: string[] = []
+        try { to = typeof p.to_hubs === 'string' ? JSON.parse(p.to_hubs) : (p.to_hubs ?? []) } catch { /* */ }
+        return { hubs: [p.from_hub, ...to].filter(Boolean), pharmacyId: null, routeId: null, vehicleId: null }
+      }
+      return { hubs: p.hub_name ? [p.hub_name] : [], pharmacyId: null, routeId: p.id ?? null, vehicleId: null }
+    }
+    return null
+  }, [selected, focusedHub, focusedVehicleId, focusedPharmacyId, hubMap])
+
+  // ── Hub click handler ──────────────────────────────────────────────────────
+  const handleFeatureSelect = (f: SelectedFeature | null) => {
+    setSelected(f)
+    setFocusedVehicleId(null)
+    setFocusedPharmacyId(null)
+    setHubModalOpen(false)
+    if (f?.type === 'hub') {
+      const name = f.properties.name as string
+      // Auto-focus hub: immediately filter routes + assignments to this hub
+      setFocusedHub(name)
+    } else {
+      // Clicking elsewhere clears hub focus only if nothing else is focused
+      if (!focusedVehicleId && !focusedPharmacyId) setFocusedHub(null)
+    }
+  }
+
+  // ── Open hub modal ─────────────────────────────────────────────────────────
+  const openHubPanel = (name: string) => {
+    setHubModalName(name)
+    setHubModalOpen(true)
+    setSelected(null)
+  }
+
+  // ── Pharmacy chain button ──────────────────────────────────────────────────
+  const handlePharmacyChain = (pharmacyId: number, hubName: string) => {
+    setFocusedHub(hubName)          // show only this hub's routes
+    setFocusedPharmacyId(pharmacyId) // show only this pharmacy's assignment
+    setSelected(null)
+  }
 
   const step4Done    = status[4]?.status === 'done'
   const isAnyRunning = Object.values(status).some(s => s.status === 'running')
@@ -111,7 +165,7 @@ export default function App() {
     : Object.values(status).some(s => s.status === 'error') ? 'error'
     : step4Done ? 'done' : 'idle'
 
-  const closeAllOverlays = () => { setSelected(null); setHubPanel(null); setSelectedRouteId(null) }
+  const hasAnyFocus = !!(focusedHub || focusedVehicleId || focusedPharmacyId)
 
   return (
     <div className="flex flex-col h-screen bg-slate-950 text-slate-100 overflow-hidden">
@@ -125,10 +179,7 @@ export default function App() {
               <circle cx="10" cy="6" r="1.5" fill="currentColor"/>
             </svg>
           </div>
-          <div>
-            <span className="text-sm font-bold text-white tracking-tight">Pharma Logistics</span>
-            <span className="text-xs text-slate-400 ml-1.5">CH</span>
-          </div>
+          <span className="text-sm font-bold text-white tracking-tight">Pharma Logistics <span className="text-slate-400 font-normal">CH</span></span>
         </div>
 
         <nav className="flex items-center gap-0.5 flex-1">
@@ -163,7 +214,7 @@ export default function App() {
       <div className="flex flex-1 overflow-hidden">
         <aside className="w-64 flex-shrink-0 flex flex-col bg-slate-900 border-r border-slate-700/60 overflow-hidden">
           <PipelinePanel status={status} onRunStep={runStep}
-            onReset={() => { reset(); closeAllOverlays(); setFocusedHub(null) }}
+            onReset={() => { reset(); clearAll() }}
             loading={loading} error={error} />
         </aside>
 
@@ -171,10 +222,12 @@ export default function App() {
           <div className={view === 'map' ? 'absolute inset-0' : 'hidden'}>
             <MapView
               pipelineStatus={status}
-              onFeatureSelect={f => { setSelected(f); setHubPanel(null); setSelectedRouteId(null) }}
+              onFeatureSelect={handleFeatureSelect}
               visibleLayers={visibleLayers}
               isAnyRunning={isAnyRunning}
               focusedHub={focusedHub}
+              focusedVehicleId={focusedVehicleId}
+              focusedPharmacyId={focusedPharmacyId}
               vehicleTypeFilter={vehicleTypeFilter}
               highlight={highlight}
             />
@@ -184,35 +237,53 @@ export default function App() {
                 vehicleTypes={vehicleTypes} vehicleTypeFilter={vehicleTypeFilter} onToggleVehicle={toggleVehicleType} />
             </div>
 
-            {(focusedHub || highlight) && (
+            {/* Status banner */}
+            {hasAnyFocus && (
               <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10
-                              bg-blue-700/95 backdrop-blur border border-blue-500/40 rounded-full
-                              px-4 py-1.5 flex items-center gap-3 shadow-xl text-xs">
-                <span className="w-2 h-2 rounded-full bg-blue-300 animate-pulse" />
-                <span className="text-white font-medium">
-                  {focusedHub ? `Nur Routen: ${focusedHub}` : 'Lieferkette hervorgehoben'}
+                              bg-slate-800/95 backdrop-blur border border-slate-600/60
+                              rounded-full px-4 py-2 flex items-center gap-3 shadow-xl text-xs max-w-lg">
+                <span className="w-2 h-2 rounded-full bg-blue-400 animate-pulse flex-shrink-0" />
+                <span className="text-slate-200 font-medium truncate">
+                  {focusedVehicleId
+                    ? `Fahrzeug: ${focusedVehicleId.split('_').slice(1).join(' ')}`
+                    : focusedPharmacyId != null
+                      ? `Lieferkette Apotheke #${focusedPharmacyId}`
+                      : `Hub: ${focusedHub}`
+                  }
                 </span>
-                <button onClick={() => { setFocusedHub(null); closeAllOverlays() }}
-                        className="text-blue-200 hover:text-white font-medium">✕ Zurücksetzen</button>
+                {/* Reopen modal button */}
+                {focusedVehicleId && hubModalName && (
+                  <button onClick={() => setHubModalOpen(true)}
+                          className="text-blue-300 hover:text-blue-200 flex-shrink-0 px-2 py-0.5 rounded
+                                     border border-blue-600/40 hover:border-blue-500 transition-colors">
+                    📋 Übersicht
+                  </button>
+                )}
+                {focusedHub && !focusedVehicleId && hubModalName === focusedHub && (
+                  <button onClick={() => setHubModalOpen(true)}
+                          className="text-blue-300 hover:text-blue-200 flex-shrink-0 px-2 py-0.5 rounded
+                                     border border-blue-600/40 hover:border-blue-500 transition-colors">
+                    📋 Übersicht
+                  </button>
+                )}
+                <button onClick={clearAll}
+                        className="text-slate-400 hover:text-white flex-shrink-0 ml-1 font-semibold">
+                  ✕
+                </button>
               </div>
             )}
 
-            {/* Info panel (top-right) */}
-            {selected && !hubPanel && (
+            {/* InfoSidebar */}
+            {selected && (
               <div className="absolute top-4 right-4 z-10">
-                <InfoSidebar feature={selected} onClose={() => setSelected(null)}
-                  focusedHub={focusedHub} onFocusHub={setFocusedHub}
-                  onOpenHubPanel={hn => { setHubPanel(hn); setSelected(null) }} />
-              </div>
-            )}
-
-            {/* Hub overview drawer (right) */}
-            {hubPanel && (
-              <div className="absolute top-4 right-4 bottom-4 z-10">
-                <HubRoutesPanel hubName={hubPanel}
-                  selectedRouteId={selectedRouteId}
-                  onSelectRoute={setSelectedRouteId}
-                  onClose={() => { setHubPanel(null); setSelectedRouteId(null) }} />
+                <InfoSidebar
+                  feature={selected}
+                  onClose={() => setSelected(null)}
+                  focusedHub={focusedHub}
+                  onFocusHub={h => { setFocusedHub(h); if (!h) { setFocusedVehicleId(null); setFocusedPharmacyId(null) } }}
+                  onOpenHubPanel={openHubPanel}
+                  onPharmacyChain={handlePharmacyChain}
+                />
               </div>
             )}
           </div>
@@ -221,6 +292,19 @@ export default function App() {
           {view === 'settings' && <div className="absolute inset-0"><SettingsPage /></div>}
         </main>
       </div>
+
+      {/* ── Hub routes modal (portal-style overlay) ────────────────────── */}
+      {hubModalOpen && hubModalName && (
+        <HubRoutesPanel
+          hubName={hubModalName}
+          focusedVehicleId={focusedVehicleId}
+          onSelectVehicle={vehicleId => {
+            setFocusedVehicleId(vehicleId)
+            setFocusedHub(hubModalName) // keep hub context
+          }}
+          onClose={() => setHubModalOpen(false)}
+        />
+      )}
     </div>
   )
 }

@@ -161,7 +161,7 @@ export function SettingsPage() {
                 {[
                   'population_per_item', 'max_catchment_km', 'vz_hard_radius_km',
                   'vz_capacity', 'mvz_capacity', 'default_demand_est',
-                  'shift_hours', 'traffic_factor', 'co2_shadow_chf',
+                  'shift_start', 'shift_hours', 'traffic_factor', 'co2_shadow_chf',
                 ].map(key => (
                   <SysField key={key} conf={sysConf.find(c => c.key === key)}
                              value={sysVal(key)} onChange={v => setSysEdits(p => ({...p, [key]: v}))} />
@@ -218,6 +218,64 @@ export function SettingsPage() {
                 }`}
               >
                 {saving ? 'Speichern…' : 'Einstellungen speichern'}
+              </button>
+            </div>
+          </div>
+        </section>
+
+        {/* ── Opening hours ────────────────────────────────────────────── */}
+        <section className="bg-slate-900/60 border border-slate-700/60 rounded-xl overflow-hidden">
+          <div className="px-5 py-4 border-b border-slate-700/60 bg-slate-800/40">
+            <h3 className="text-sm font-semibold text-slate-200">Öffnungszeiten</h3>
+            <p className="text-xs text-slate-500 mt-0.5">
+              Stunden als Dezimalzahl (z.B. 8.5 = 08:30 · 18.75 = 18:45).
+              Routing überspringt Stops außerhalb dieser Zeiten.
+              Änderungen wirken ab nächstem Step 1 (Hubs) bzw. sofort für neue Apotheken-Imports.
+            </p>
+          </div>
+          <div className="px-5 py-5">
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+              {[
+                { label: 'Apotheke Öffnung', key: 'pharmacy_open_hour' },
+                { label: 'Apotheke Schluss', key: 'pharmacy_close_hour' },
+                { label: 'HQ Öffnung',      key: 'hub_hq_open' },
+                { label: 'HQ Schluss',      key: 'hub_hq_close' },
+                { label: 'VZ Öffnung',      key: 'hub_vz_open' },
+                { label: 'VZ Schluss',      key: 'hub_vz_close' },
+                { label: 'mVZ Öffnung',     key: 'hub_mvz_open' },
+                { label: 'mVZ Schluss',     key: 'hub_mvz_close' },
+              ].map(({ label, key }) => (
+                <div key={key}>
+                  <label className="block text-xs text-slate-300 font-medium mb-1">{label}</label>
+                  <div className="relative">
+                    <input type="number" step="0.25" min="0" max="24"
+                           value={sysEdits[key] ?? sysConf.find(c => c.key === key)?.value ?? ''}
+                           onChange={e => setSysEdits(p => ({ ...p, [key]: e.target.value }))}
+                           className="w-full bg-slate-800 text-slate-200 text-sm rounded-lg px-3 py-2 pr-14
+                                      border border-slate-700 focus:outline-none focus:border-blue-500 transition-colors" />
+                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-500 pointer-events-none">
+                      {(() => {
+                        const raw = sysEdits[key] ?? sysConf.find(c => c.key === key)?.value ?? ''
+                        const h = parseFloat(raw)
+                        if (isNaN(h)) return ''
+                        const hrs  = Math.floor(h)
+                        const mins = Math.round((h - hrs) * 60)
+                        return `${hrs.toString().padStart(2,'0')}:${mins.toString().padStart(2,'0')}`
+                      })()}
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="flex justify-end mt-5">
+              <button onClick={saveSystemConfig}
+                      disabled={saving || Object.keys(sysEdits).length === 0}
+                      className={`text-sm px-6 py-2 rounded-lg font-semibold transition-all ${
+                        Object.keys(sysEdits).length > 0
+                          ? 'bg-blue-600 hover:bg-blue-500 text-white'
+                          : 'bg-slate-800 text-slate-600 cursor-not-allowed'
+                      }`}>
+                {saving ? 'Speichern…' : 'Öffnungszeiten speichern'}
               </button>
             </div>
           </div>

@@ -11,6 +11,15 @@ from app.db.session import SessionLocal
 router = APIRouter()
 
 
+def _fmt_hour(h: float | None) -> str:
+    """Convert float hour to HH:MM string. 8.5 → '08:30'."""
+    if h is None:
+        return "—"
+    hrs  = int(h)
+    mins = round((h - hrs) * 60)
+    return f"{hrs:02d}:{mins:02d}"
+
+
 @router.get("/pharmacies")
 def get_pharmacies():
     db = SessionLocal()
@@ -23,11 +32,15 @@ def get_pharmacies():
                     "type": "Feature",
                     "geometry": {"type": "Point", "coordinates": [p.lon, p.lat]},
                     "properties": {
-                        "id": p.id,
-                        "name": p.name or "",
-                        "city": p.city or "",
-                        "demand": p.demand,
-                        "hub_name": p.hub_name,
+                        "id":            p.id,
+                        "name":          p.name or "",
+                        "city":          p.city or "",
+                        "demand":        p.demand,
+                        "hub_name":      p.hub_name,
+                        "open_hour":     p.open_hour,
+                        "close_hour":    p.close_hour,
+                        "opening_hours": f"{_fmt_hour(p.open_hour)} – {_fmt_hour(p.close_hour)}"
+                                         if p.open_hour is not None else None,
                     },
                 }
                 for p in rows
@@ -89,6 +102,10 @@ def get_hubs():
                         "total_items":     route_stats[h.name]["total_items"],
                         "total_km":        round(route_stats[h.name]["total_km"], 1),
                         "delivery_window": delivery_window,
+                        "open_hour":       h.open_hour,
+                        "close_hour":      h.close_hour,
+                        "opening_hours":   f"{_fmt_hour(h.open_hour)} – {_fmt_hour(h.close_hour)}"
+                                           if h.open_hour is not None else None,
                     },
                 }
                 for h in rows

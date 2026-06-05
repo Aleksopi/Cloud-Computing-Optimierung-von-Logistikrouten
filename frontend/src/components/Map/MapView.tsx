@@ -38,6 +38,8 @@ interface MapViewProps {
   visibleLayers:     Set<string>
   isAnyRunning:      boolean
   focusedHub:        string | null
+  focusedVehicleId:  string | null      // show only this vehicle's route
+  focusedPharmacyId: number | null      // show only this pharmacy's assignment
   vehicleTypeFilter: Set<string>
   highlight:         HighlightState | null
 }
@@ -70,7 +72,8 @@ interface CacheEntry { data?: GeoJSON.FeatureCollection; fetching: boolean; key?
 
 export function MapView({
   pipelineStatus, onFeatureSelect, visibleLayers,
-  isAnyRunning, focusedHub, vehicleTypeFilter, highlight,
+  isAnyRunning, focusedHub, focusedVehicleId, focusedPharmacyId,
+  vehicleTypeFilter, highlight,
 }: MapViewProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const mapRef       = useRef<maplibregl.Map | null>(null)
@@ -270,15 +273,36 @@ export function MapView({
         map.setLayoutProperty(id, 'visibility', visibleLayers.has(k) ? 'visible' : 'none')
   }, [visibleLayers])
 
-  // ── Hard filter (focused hub + vehicle type) on routes-layer ───────────────
+  // ── Hard filters ─────────────────────────────────────────────────────────
   const applyFilter = useCallback(() => {
     const map = mapRef.current
-    if (!map || !readyRef.current || !map.getLayer('routes-layer')) return
-    const conds: any[] = []
-    if (focusedHub) conds.push(['==', ['get', 'hub_name'], focusedHub])
-    if (vehicleTypeFilter.size > 0) conds.push(['in', ['get', 'vehicle_type'], ['literal', [...vehicleTypeFilter]]])
-    map.setFilter('routes-layer', conds.length === 0 ? null : conds.length === 1 ? conds[0] : ['all', ...conds])
-  }, [focusedHub, vehicleTypeFilter])
+    if (!map || !readyRef.current) return
+
+    // routes-layer: vehicle_id > hub_name > vehicle_type
+    if (map.getLayer('routes-layer')) {
+      const conds: any[] = []
+      if (focusedVehicleId) {
+        conds.push(['==', ['get', 'vehicle_id'], focusedVehicleId])
+      } else if (focusedHub) {
+        conds.push(['==', ['get', 'hub_name'], focusedHub])
+        if (vehicleTypeFilter.size > 0) conds.push(['in', ['get', 'vehicle_type'], ['literal', [...vehicleTypeFilter]]])
+      } else if (vehicleTypeFilter.size > 0) {
+        conds.push(['in', ['get', 'vehicle_type'], ['literal', [...vehicleTypeFilter]]])
+      }
+      map.setFilter('routes-layer', conds.length === 0 ? null : conds.length === 1 ? conds[0] : ['all', ...conds])
+    }
+
+    // assignments-layer: filter to single pharmacy or single hub
+    if (map.getLayer('assignments-layer')) {
+      if (focusedPharmacyId != null) {
+        map.setFilter('assignments-layer', ['==', ['get', 'pharmacy_id'], focusedPharmacyId])
+      } else if (focusedHub) {
+        map.setFilter('assignments-layer', ['==', ['get', 'hub_name'], focusedHub])
+      } else {
+        map.setFilter('assignments-layer', null)
+      }
+    }
+  }, [focusedHub, focusedVehicleId, focusedPharmacyId, vehicleTypeFilter])
   const applyFilterRef = useRef(applyFilter); applyFilterRef.current = applyFilter
   useEffect(() => { applyFilter() }, [applyFilter])
 
