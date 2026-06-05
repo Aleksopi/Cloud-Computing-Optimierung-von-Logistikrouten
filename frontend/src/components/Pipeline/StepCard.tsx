@@ -105,7 +105,7 @@ export function StepCard({ step, info, onRun, isLoading, canRun }: StepCardProps
 
             {status === 'error' && info.error_message && (
               <div className="mt-1.5 p-1.5 bg-red-950/50 border border-red-800/40 rounded text-xs text-red-400 line-clamp-2">
-                {info.error_message.split('\n').at(-1) ?? info.error_message}
+                {(info.error_message.split('\n').pop() ?? info.error_message)}
               </div>
             )}
           </div>

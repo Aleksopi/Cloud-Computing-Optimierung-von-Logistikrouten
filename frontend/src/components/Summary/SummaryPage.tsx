@@ -3,45 +3,49 @@ import { api } from '../../api/client'
 import type { FullSummary, PipelineStatus, VzStats, VehicleConfig } from '../../types'
 import { COLORS } from '../Map/MapView'
 
-interface SummaryPageProps {
-  pipelineStatus: PipelineStatus
-}
+interface SummaryPageProps { pipelineStatus: PipelineStatus }
 
-const VEHICLE_COLORS: Record<string, string> = {
-  Sprinter: COLORS.sprinterRoute,
-  LKW:      COLORS.lkwRoute,
-  Backbone: COLORS.backbone ?? '#94a3b8',
-}
-function vcol(name: string, idx: number) {
-  if (VEHICLE_COLORS[name]) return VEHICLE_COLORS[name]
-  const palette = ['#f59e0b','#8b5cf6','#06b6d4','#10b981','#f97316']
-  return palette[idx % palette.length]
+const VCOL = (name: string, i: number) => {
+  const m: Record<string, string> = { Sprinter: COLORS.sprinterRoute, LKW: COLORS.lkwRoute, Backbone: COLORS.backbone }
+  if (m[name]) return m[name]
+  return ['#f59e0b','#8b5cf6','#06b6d4','#10b981'][i % 4]
 }
 
 export function SummaryPage({ pipelineStatus }: SummaryPageProps) {
   const [data, setData]       = useState<FullSummary | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError]     = useState<string | null>(null)
-
   const step4Done = pipelineStatus[4]?.status === 'done'
 
   useEffect(() => {
     if (!step4Done) return
     setLoading(true); setError(null)
-    api.fullSummary()
-      .then(setData)
-      .catch(e => setError(e instanceof Error ? e.message : String(e)))
-      .finally(() => setLoading(false))
+    api.fullSummary().then(setData).catch(e => setError(e.message)).finally(() => setLoading(false))
   }, [step4Done])
 
   if (!step4Done) return (
-    <div className="flex flex-col items-center justify-center h-full text-gray-500 gap-3">
-      <span className="text-4xl">📊</span>
-      <p className="text-sm">Bitte zuerst alle 4 Pipeline-Schritte ausführen.</p>
+    <div className="flex flex-col items-center justify-center h-full text-slate-500 gap-4">
+      <div className="w-16 h-16 rounded-2xl bg-slate-800/60 border border-slate-700/40 flex items-center justify-center">
+        <svg className="w-8 h-8 text-slate-600" viewBox="0 0 24 24" fill="none">
+          <rect x="2" y="12" width="4" height="10" rx="1" fill="currentColor"/>
+          <rect x="9" y="7" width="4" height="15" rx="1" fill="currentColor"/>
+          <rect x="16" y="2" width="4" height="20" rx="1" fill="currentColor"/>
+        </svg>
+      </div>
+      <div className="text-center">
+        <p className="text-sm font-medium text-slate-400">Analyse nicht verfügbar</p>
+        <p className="text-xs text-slate-600 mt-1">Bitte alle 4 Pipeline-Schritte ausführen</p>
+      </div>
     </div>
   )
+
   if (loading) return (
-    <div className="flex items-center justify-center h-full text-gray-400 text-sm">Lade Daten…</div>
+    <div className="flex items-center justify-center h-full">
+      <div className="text-center space-y-3">
+        <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto"/>
+        <p className="text-sm text-slate-400">Analysiere Ergebnisse…</p>
+      </div>
+    </div>
   )
   if (error) return (
     <div className="flex items-center justify-center h-full text-red-400 text-sm">{error}</div>
@@ -49,259 +53,267 @@ export function SummaryPage({ pipelineStatus }: SummaryPageProps) {
   if (!data) return null
 
   const { overview, fleet_by_type, fleet, vehicle_specs, optimization, supply_chain } = data
-
-  const deliverySpecs = vehicle_specs.filter(v => v.vehicle_class === 'delivery')
+  const deliverySpecs = vehicle_specs.filter(v => v.vehicle_class === 'delivery' && v.enabled)
   const backboneSpec  = vehicle_specs.find(v => v.vehicle_class === 'backbone')
-
-  // CO2 saved: compare actual last-mile CO2 vs hypothetical all-LKW
-  const lkwSpec = vehicle_specs.find(v => v.name === 'LKW')
-  const totalLastMileKm = fleet.last_mile.total_km
-  const hypotheticalCo2 = lkwSpec ? totalLastMileKm * lkwSpec.co2_g_per_km / 1000 : 0
-  const co2Saved = Math.max(0, Math.round(hypotheticalCo2 - fleet.last_mile.total_co2_kg))
+  const lkwSpec       = vehicle_specs.find(v => v.name === 'LKW')
+  const co2Saved      = lkwSpec ? Math.max(0, Math.round(fleet.last_mile.total_km * lkwSpec.co2_g_per_km / 1000 - fleet.last_mile.total_co2_kg)) : 0
 
   return (
-    <div className="h-full overflow-y-auto bg-gray-950 text-white">
-      <div className="max-w-5xl mx-auto px-6 py-6 space-y-8">
+    <div className="h-full overflow-y-auto bg-slate-950 text-slate-100">
+      <div className="max-w-6xl mx-auto px-6 py-6 space-y-6">
 
-        {/* Header */}
-        <div>
-          <h2 className="text-xl font-bold">Ergebnis-Analyse</h2>
-          <p className="text-xs text-gray-500 mt-0.5">
-            {overview.pharmacies_assigned}/{overview.pharmacies_total} Apotheken · {overview.hubs_total} Hubs
-          </p>
-        </div>
-
-        {/* KPI Row */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-          <KpiCard label="Gesamtkosten"    value={`CHF ${fmt(overview.total_cost_chf)}`}
-                   sub="inkl. Backbone" color="blue" />
-          <KpiCard label="CO₂-Emissionen" value={`${fmt(overview.total_co2_kg)} kg`}
-                   sub={co2Saved > 0 ? `−${fmt(co2Saved)} kg vs. Vollflotte LKW` : ''} color="green" />
-          <KpiCard label="Gesamtstrecke"  value={`${fmt(overview.total_km)} km`}
-                   sub="alle Fahrzeugrouten" color="amber" />
-          <KpiCard label="Fahrzeugrouten" value={`${overview.total_last_mile_routes}`}
-                   sub={Object.entries(fleet_by_type).map(([t,s]) => `${s.count} ${t}`).join(' + ')}
-                   color="violet" />
-        </div>
-
-        {/* Fleet by vehicle type */}
-        <Section title="Flotteneinsatz nach Fahrzeugtyp">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-            {deliverySpecs.map((spec, i) => {
-              const stats = fleet_by_type[spec.name]
-              if (!stats) return null
-              return (
-                <FleetCard key={spec.id} title={spec.name} spec={spec}
-                           stats={stats} color={vcol(spec.name, i)} />
-              )
-            })}
-            {backboneSpec && (
-              <FleetCard title="Backbone-Lieferung" spec={backboneSpec}
-                         stats={fleet.backbone} color={COLORS.backbone ?? '#94a3b8'} isBackbone />
-            )}
-          </div>
-        </Section>
-
-        {/* CO2 bar chart */}
-        <Section title="CO₂-Vergleich">
-          <div className="space-y-3">
-            {deliverySpecs.map((spec, i) => {
-              const stats = fleet_by_type[spec.name]
-              if (!stats) return null
-              return (
-                <Co2Bar key={spec.id} label={spec.name} kg={stats.total_co2_kg}
-                        km={stats.total_km} gPerKm={spec.co2_g_per_km}
-                        color={vcol(spec.name, i)} />
-              )
-            })}
-            <Co2Bar label="Backbone" kg={fleet.backbone.total_co2_kg}
-                    km={fleet.backbone.total_km}
-                    gPerKm={backboneSpec?.co2_g_per_km ?? 450}
-                    color={COLORS.backbone ?? '#94a3b8'} />
-          </div>
-          {co2Saved > 0 && (
-            <p className="text-xs text-gray-500 mt-3">
-              CO₂-Einsparung durch Sprinter vs. Vollflotte LKW:{' '}
-              <span className="text-green-400 font-semibold">−{fmt(co2Saved)} kg</span>
+        {/* Page header */}
+        <div className="flex items-start justify-between">
+          <div>
+            <h2 className="text-lg font-bold text-white">Analyse &amp; Ergebnisse</h2>
+            <p className="text-xs text-slate-500 mt-0.5">
+              {overview.pharmacies_assigned}/{overview.pharmacies_total} Apotheken versorgt
+              · {overview.hubs_total} Hubs · {supply_chain.vz_count} VZ + {supply_chain.mvz_count} mVZ
             </p>
-          )}
-        </Section>
+          </div>
+        </div>
 
-        {/* Supply Chain */}
-        <Section title={`Lieferkette · ${supply_chain.hq_name ?? 'HQ'} → ${supply_chain.vz_count} VZ → ${supply_chain.mvz_count} mVZ → ${supply_chain.pharmacy_count} Apotheken`}>
+        {/* ── KPI Row ────────────────────────────────────────────────────── */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          <KpiCard label="Gesamtkosten"    main={`CHF ${fmt(overview.total_cost_chf)}`}
+                   sub="inkl. Backbone"   icon="💰" accent="blue" />
+          <KpiCard label="CO₂-Emissionen" main={`${fmt(overview.total_co2_kg)} kg`}
+                   sub={co2Saved > 0 ? `−${fmt(co2Saved)} kg vs. Vollflotte LKW` : 'Gesamtemissionen'}
+                   icon="🌱" accent="green" />
+          <KpiCard label="Gesamtstrecke"  main={`${fmt(overview.total_km)} km`}
+                   sub="alle Fahrzeugrouten" icon="📏" accent="amber" />
+          <KpiCard label="Fahrzeugrouten" main={`${overview.total_last_mile_routes}`}
+                   sub={Object.entries(fleet_by_type).map(([t,s]) => `${s.count} ${t}`).join(' · ')}
+                   icon="🚐" accent="violet" />
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+          {/* ── Left 2/3: Fleet + CO2 ──────────────────────────────────── */}
+          <div className="lg:col-span-2 space-y-6">
+
+            {/* Fleet cards */}
+            <Card title="Flotteneinsatz" sub="nach Fahrzeugtyp">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                {deliverySpecs.map((spec, i) => {
+                  const stats = fleet_by_type[spec.name]
+                  if (!stats) return null
+                  return <FleetCard key={spec.id} spec={spec} stats={stats} color={VCOL(spec.name, i)} />
+                })}
+                {backboneSpec && (
+                  <FleetCard spec={backboneSpec} stats={fleet.backbone}
+                             color={VCOL('Backbone', 99)} isBackbone />
+                )}
+              </div>
+            </Card>
+
+            {/* CO2 bars */}
+            <Card title="CO₂-Bilanz" sub="Emissionen nach Fahrzeugtyp">
+              <div className="space-y-3">
+                {[...deliverySpecs, ...(backboneSpec ? [backboneSpec] : [])].map((spec, i) => {
+                  const stats = spec.vehicle_class === 'backbone' ? fleet.backbone : fleet_by_type[spec.name]
+                  if (!stats) return null
+                  const maxKg = Math.max(overview.total_co2_kg, 1)
+                  const pct   = Math.min(100, (stats.total_co2_kg / maxKg) * 100)
+                  return (
+                    <div key={spec.id}>
+                      <div className="flex justify-between text-xs mb-1.5">
+                        <span className="text-slate-400 flex items-center gap-2">
+                          <span className="w-2 h-2 rounded-full" style={{ backgroundColor: VCOL(spec.name, i) }}/>
+                          {spec.name}
+                        </span>
+                        <span className="text-slate-300">
+                          {fmt(stats.total_co2_kg)} kg
+                          <span className="text-slate-600 ml-2">{spec.co2_g_per_km} g/km · {fmt(stats.total_km)} km</span>
+                        </span>
+                      </div>
+                      <div className="h-2.5 bg-slate-800 rounded-full overflow-hidden">
+                        <div className="h-full rounded-full transition-all duration-500"
+                             style={{ width: `${pct}%`, backgroundColor: VCOL(spec.name, i) }} />
+                      </div>
+                    </div>
+                  )
+                })}
+                {co2Saved > 0 && (
+                  <div className="mt-2 flex items-center gap-2 text-xs text-emerald-400 bg-emerald-950/30 border border-emerald-800/30 rounded-lg px-3 py-2">
+                    <span>↓</span>
+                    <span>CO₂-Einsparung durch Sprinter vs. Vollflotte LKW: <strong>{fmt(co2Saved)} kg</strong></span>
+                  </div>
+                )}
+              </div>
+            </Card>
+
+            {/* Vehicle specs table */}
+            <Card title="Fahrzeugspezifikationen" sub="Aktive Flottenkonfiguration">
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="text-slate-500 border-b border-slate-800">
+                      {['Fahrzeug','Kap.','Reichw.','CHF/km','CO₂/km','Tempo','Fahrer/h','Stop'].map(h => (
+                        <th key={h} className="pb-2 pr-4 text-left font-medium">{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-800/60">
+                    {vehicle_specs.filter(v => v.enabled).map((v, i) => (
+                      <tr key={v.id} className="text-slate-300 hover:bg-slate-800/20">
+                        <td className="py-2 pr-4 font-semibold" style={{ color: VCOL(v.name, i) }}>{v.name}</td>
+                        <td className="py-2 pr-4">{v.capacity ?? '∞'} Einh.</td>
+                        <td className="py-2 pr-4">{v.range_km ? `${v.range_km} km` : '—'}</td>
+                        <td className="py-2 pr-4">CHF {v.cost_per_km}</td>
+                        <td className="py-2 pr-4">{v.co2_g_per_km} g</td>
+                        <td className="py-2 pr-4">{v.speed_kmh} km/h</td>
+                        <td className="py-2 pr-4">{v.driver_chf_h ? `CHF ${v.driver_chf_h}` : '—'}</td>
+                        <td className="py-2">{v.service_min ? `${v.service_min} min` : '—'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </Card>
+          </div>
+
+          {/* ── Right 1/3: Optimisation + Supply chain ─────────────────── */}
+          <div className="space-y-6">
+
+            {/* Optimisation weights */}
+            <Card title="Optimierung" sub="Scoring-Gewichte">
+              <div className="space-y-3">
+                {[
+                  { label: 'Kosten', value: optimization.weights.cost, color: 'bg-blue-500' },
+                  { label: 'Zeit',   value: optimization.weights.time, color: 'bg-amber-500' },
+                  { label: 'CO₂',   value: optimization.weights.environment, color: 'bg-emerald-500' },
+                ].map(w => (
+                  <div key={w.label}>
+                    <div className="flex justify-between text-xs mb-1">
+                      <span className="text-slate-400">{w.label}</span>
+                      <span className="text-slate-300 font-medium">{Math.round(w.value * 100)}%</span>
+                    </div>
+                    <div className="h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                      <div className={`h-full rounded-full ${w.color}`} style={{ width: `${w.value * 100}%` }}/>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <div className="mt-3 pt-3 border-t border-slate-800 space-y-1.5">
+                <MetaRow label="Verkehrsfaktor"  value={`${optimization.traffic_factor} (free-flow)`} />
+                <MetaRow label="CO₂-Preis"       value={`CHF ${optimization.co2_shadow_chf_per_kg}/kg`} />
+                <MetaRow label="Schichtlänge"    value={`${optimization.shift_hours} h`} />
+              </div>
+            </Card>
+
+            {/* Supply chain summary */}
+            <Card title="Lieferkette" sub={supply_chain.hq_name ?? 'HQ → VZ → mVZ'}>
+              <div className="space-y-2 text-xs">
+                <ChainRow label="HQ → VZ" count={supply_chain.vz_count} color="bg-red-500" />
+                <ChainRow label="VZ → mVZ" count={supply_chain.mvz_count} color="bg-teal-500" />
+                <ChainRow label="→ Apotheken" count={supply_chain.pharmacy_count} color="bg-blue-500" />
+              </div>
+            </Card>
+
+          </div>
+        </div>
+
+        {/* ── Supply chain hierarchy ────────────────────────────────────── */}
+        <Card title="Lieferketten-Hierarchie" sub="VZ-Einzugsgebiete aufklappen für Details">
           <div className="space-y-2">
             {supply_chain.hierarchy.map(vz => <VzRow key={vz.name} vz={vz} />)}
           </div>
-        </Section>
-
-        {/* Vehicle specs table */}
-        <Section title="Fahrzeugspezifikationen">
-          <div className="overflow-x-auto">
-            <table className="w-full text-xs text-left">
-              <thead>
-                <tr className="border-b border-gray-700 text-gray-400">
-                  <th className="py-2 pr-4">Fahrzeug</th>
-                  <th className="py-2 pr-4">Kapazität</th>
-                  <th className="py-2 pr-4">Reichweite</th>
-                  <th className="py-2 pr-4">CHF / km</th>
-                  <th className="py-2 pr-4">CO₂ / km</th>
-                  <th className="py-2 pr-4">Tempo</th>
-                  <th className="py-2 pr-4">Fahrer / h</th>
-                  <th className="py-2">Stop-Zeit</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-800">
-                {vehicle_specs.filter(v => v.enabled).map((v, i) => (
-                  <tr key={v.id} className="text-gray-300">
-                    <td className="py-2 pr-4 font-medium" style={{ color: vcol(v.name, i) }}>{v.name}</td>
-                    <td className="py-2 pr-4">{v.capacity ?? '∞'} Einh.</td>
-                    <td className="py-2 pr-4">{v.range_km ? `${v.range_km} km` : '—'}</td>
-                    <td className="py-2 pr-4">CHF {v.cost_per_km}</td>
-                    <td className="py-2 pr-4">{v.co2_g_per_km} g</td>
-                    <td className="py-2 pr-4">{v.speed_kmh} km/h</td>
-                    <td className="py-2 pr-4">{v.driver_chf_h ? `CHF ${v.driver_chf_h}` : '—'}</td>
-                    <td className="py-2">{v.service_min ? `${v.service_min} min` : '—'}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </Section>
-
-        {/* Optimisation parameters */}
-        <Section title="Optimierungsparameter">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div>
-              <p className="text-xs text-gray-400 mb-3">Gewichtung der Routenoptimierung</p>
-              <div className="space-y-2">
-                <WeightBar label="Kosten (CHF)"         value={optimization.weights.cost}        color="bg-blue-500" />
-                <WeightBar label="Zeit (Fahrerstunden)" value={optimization.weights.time}        color="bg-amber-500" />
-                <WeightBar label="Umwelt (CO₂)"         value={optimization.weights.environment} color="bg-green-500" />
-              </div>
-              <p className="text-xs text-gray-600 mt-3">
-                Score = {Math.round(optimization.weights.cost*100)}% Kosten +{' '}
-                {Math.round(optimization.weights.time*100)}% Zeit +{' '}
-                {Math.round(optimization.weights.environment*100)}% CO₂
-              </p>
-            </div>
-            <div className="space-y-2 text-xs">
-              <InfoRow label="CO₂-Schattenpreis"   value={`CHF ${optimization.co2_shadow_chf_per_kg} / kg`} />
-              <InfoRow label="Verkehrsfaktor"       value={`${optimization.traffic_factor} (free-flow)`} />
-              <InfoRow label="Schichtlänge"         value={`${optimization.shift_hours} h`} />
-              <InfoRow label="Live-Verkehr"         value="In Vorbereitung" dim />
-              <div className="mt-3 p-2 bg-gray-800/60 rounded text-gray-400 text-xs leading-relaxed">
-                Der Verkehrsfaktor skaliert alle Fahrtzeiten. Bei Live-Verkehr wird er pro
-                Streckenabschnitt dynamisch gesetzt und beeinflusst alle drei Scoring-Gewichte gleichzeitig.
-              </div>
-            </div>
-          </div>
-        </Section>
+        </Card>
 
       </div>
     </div>
   )
 }
 
-// ── Sub-components ────────────────────────────────────────────────────────────
-
+/* ── helpers ─────────────────────────────────────────────────────────────── */
 function fmt(n: number) { return n.toLocaleString('de-CH', { maximumFractionDigits: 1 }) }
 
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
+function Card({ title, sub, children }: { title: string; sub?: string; children: React.ReactNode }) {
   return (
-    <div>
-      <h3 className="text-sm font-semibold text-gray-300 mb-3 pb-1 border-b border-gray-800">{title}</h3>
-      {children}
+    <div className="bg-slate-900/60 border border-slate-700/60 rounded-xl overflow-hidden">
+      <div className="px-4 py-3 border-b border-slate-700/40 bg-slate-800/30">
+        <div className="flex items-baseline gap-2">
+          <span className="text-sm font-semibold text-slate-200">{title}</span>
+          {sub && <span className="text-xs text-slate-500">{sub}</span>}
+        </div>
+      </div>
+      <div className="p-4">{children}</div>
     </div>
   )
 }
 
-const KPI_BG:  Record<string,string> = { blue:'border-blue-700/50 bg-blue-900/20', green:'border-green-700/50 bg-green-900/20', amber:'border-amber-700/50 bg-amber-900/20', violet:'border-violet-700/50 bg-violet-900/20' }
-const KPI_TXT: Record<string,string> = { blue:'text-blue-300', green:'text-green-300', amber:'text-amber-300', violet:'text-violet-300' }
+const ACCENT_MAP: Record<string, { border: string; bg: string; text: string }> = {
+  blue:   { border: 'border-blue-700/40',   bg: 'bg-blue-950/20',   text: 'text-blue-300'   },
+  green:  { border: 'border-emerald-700/40', bg: 'bg-emerald-950/20', text: 'text-emerald-300' },
+  amber:  { border: 'border-amber-700/40',  bg: 'bg-amber-950/20',  text: 'text-amber-300'  },
+  violet: { border: 'border-violet-700/40', bg: 'bg-violet-950/20', text: 'text-violet-300' },
+}
 
-function KpiCard({ label, value, sub, color }: { label:string; value:string; sub:string; color:string }) {
+function KpiCard({ label, main, sub, icon, accent }: {
+  label: string; main: string; sub: string; icon: string; accent: string
+}) {
+  const a = ACCENT_MAP[accent]
   return (
-    <div className={`rounded-xl border p-4 ${KPI_BG[color]}`}>
-      <p className="text-xs text-gray-500 mb-1">{label}</p>
-      <p className={`text-xl font-bold ${KPI_TXT[color]}`}>{value}</p>
-      <p className="text-xs text-gray-600 mt-1">{sub}</p>
+    <div className={`stat-card rounded-xl border p-4 ${a.border} ${a.bg}`}>
+      <div className="flex items-center justify-between mb-2">
+        <span className="text-xs text-slate-500">{label}</span>
+        <span className="text-base">{icon}</span>
+      </div>
+      <div className={`text-xl font-bold ${a.text}`}>{main}</div>
+      <div className="text-xs text-slate-600 mt-1">{sub}</div>
     </div>
   )
 }
 
-function FleetCard({ title, spec, stats, color, isBackbone }: {
-  title: string; spec: VehicleConfig; color: string
-  stats: import('../../types').FleetStats; isBackbone?: boolean
+function FleetCard({ spec, stats, color, isBackbone }: {
+  spec: VehicleConfig; stats: import('../../types').FleetStats; color: string; isBackbone?: boolean
 }) {
   return (
-    <div className="rounded-xl border border-gray-700/40 bg-gray-800/20 p-4">
-      <div className="flex items-center gap-2 mb-3">
-        <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: color }} />
+    <div className="rounded-xl border border-slate-700/40 bg-slate-800/20 p-3">
+      <div className="flex items-center gap-2 mb-2.5">
+        <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: color }} />
         <div>
-          <p className="text-sm font-semibold text-gray-200">{title}</p>
-          <p className="text-xs text-gray-500">{spec.co2_g_per_km} g CO₂/km · CHF {spec.cost_per_km}/km</p>
+          <p className="text-xs font-semibold text-slate-200">{spec.name}</p>
+          <p className="text-xs text-slate-600">{spec.co2_g_per_km} g CO₂/km</p>
         </div>
       </div>
       <div className="space-y-1 text-xs">
-        {!isBackbone && <FR label="Fahrzeuge"  value={`${stats.count}`} />}
-        <FR label="Strecke"    value={`${fmt(stats.total_km)} km`} />
-        <FR label="Zeit"       value={`${fmt(stats.total_hours)} h`} />
-        <FR label="Kosten"     value={`CHF ${fmt(stats.total_cost_chf)}`} />
-        <FR label="CO₂"        value={`${fmt(stats.total_co2_kg)} kg`} />
-        <FR label="Waren"      value={`${fmt(stats.total_items)} Einh.`} />
-        {spec.capacity && <FR label="Kap./Fzg" value={`${spec.capacity} Einh.`} dim />}
-        {spec.range_km && <FR label="Reichweite" value={`${spec.range_km} km`} dim />}
+        {!isBackbone && <FRow l="Fahrzeuge" v={`${stats.count}`} />}
+        <FRow l="Strecke"  v={`${fmt(stats.total_km)} km`} />
+        <FRow l="Kosten"   v={`CHF ${fmt(stats.total_cost_chf)}`} />
+        <FRow l="CO₂"      v={`${fmt(stats.total_co2_kg)} kg`} />
+        <FRow l="Waren"    v={`${fmt(stats.total_items)} Einh.`} bold />
       </div>
     </div>
   )
 }
-
-function FR({ label, value, dim }: { label:string; value:string; dim?:boolean }) {
+function FRow({ l, v, bold }: { l: string; v: string; bold?: boolean }) {
   return (
-    <div className="flex justify-between gap-2">
-      <span className={dim ? 'text-gray-600' : 'text-gray-400'}>{label}</span>
-      <span className={dim ? 'text-gray-500' : 'text-gray-200 font-medium'}>{value}</span>
+    <div className="flex justify-between gap-1">
+      <span className="text-slate-500">{l}</span>
+      <span className={bold ? 'text-slate-200 font-semibold' : 'text-slate-300'}>{v}</span>
     </div>
   )
 }
 
-function Co2Bar({ label, kg, km, gPerKm, color }: { label:string; kg:number; km:number; gPerKm:number; color:string }) {
-  const pct = Math.min(100, (kg / Math.max(kg, 5000)) * 100)
+function MetaRow({ label, value }: { label: string; value: string }) {
   return (
-    <div>
-      <div className="flex justify-between text-xs mb-1">
-        <span className="text-gray-400">{label}</span>
-        <span className="text-gray-300">
-          {fmt(kg)} kg CO₂
-          <span className="text-gray-600 ml-2">({gPerKm} g/km · {fmt(km)} km)</span>
-        </span>
-      </div>
-      <div className="h-3 bg-gray-800 rounded-full overflow-hidden">
-        <div className="h-full rounded-full" style={{ width:`${pct}%`, backgroundColor: color }} />
-      </div>
+    <div className="flex justify-between text-xs">
+      <span className="text-slate-500">{label}</span>
+      <span className="text-slate-400">{value}</span>
     </div>
   )
 }
 
-function WeightBar({ label, value, color }: { label:string; value:number; color:string }) {
-  const pct = Math.round(value * 100)
+function ChainRow({ label, count, color }: { label: string; count: number; color: string }) {
   return (
-    <div>
-      <div className="flex justify-between text-xs mb-1">
-        <span className="text-gray-400">{label}</span>
-        <span className="text-gray-300 font-medium">{pct}%</span>
+    <div className="flex items-center justify-between">
+      <div className="flex items-center gap-2">
+        <span className={`w-2 h-2 rounded-full ${color}`}/>
+        <span className="text-slate-400">{label}</span>
       </div>
-      <div className="h-2 bg-gray-800 rounded-full overflow-hidden">
-        <div className={`h-full rounded-full ${color}`} style={{ width:`${pct}%` }} />
-      </div>
-    </div>
-  )
-}
-
-function InfoRow({ label, value, dim }: { label:string; value:string; dim?:boolean }) {
-  return (
-    <div className="flex justify-between gap-3">
-      <span className="text-gray-500">{label}</span>
-      <span className={dim ? 'text-gray-600' : 'text-gray-300'}>{value}</span>
+      <span className="text-slate-300 font-semibold">{count}</span>
     </div>
   )
 }
@@ -309,50 +321,51 @@ function InfoRow({ label, value, dim }: { label:string; value:string; dim?:boole
 function VzRow({ vz }: { vz: VzStats }) {
   const [open, setOpen] = useState(false)
   return (
-    <div className="bg-gray-900/60 rounded-lg border border-gray-800 overflow-hidden">
+    <div className="border border-slate-800 rounded-xl overflow-hidden">
       <button onClick={() => setOpen(o => !o)}
-              className="w-full flex items-center justify-between px-4 py-2.5 text-left hover:bg-gray-800/40 transition-colors">
-        <div className="flex items-center gap-3">
-          <span className="w-2 h-2 rounded-full bg-blue-500" />
-          <span className="text-sm font-medium text-blue-300">{vz.name}</span>
-          <span className="text-xs text-gray-500">
-            {vz.total_pharmacies} Apotheken · {vz.mvz_count} mVZ · {fmt(vz.total_items)} Einh.
-          </span>
-        </div>
-        <div className="flex items-center gap-3 text-xs text-gray-500">
-          {vz.backbone_km      && <span>{fmt(vz.backbone_km)} km vom HQ</span>}
+              className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-slate-800/40 transition-colors">
+        <span className="w-2 h-2 rounded-full bg-blue-500 flex-shrink-0"/>
+        <span className="text-sm font-semibold text-blue-300">{vz.name}</span>
+        <span className="text-xs text-slate-500">
+          {vz.total_pharmacies} Apotheken · {vz.mvz_count} mVZ · {fmt(vz.total_items)} Einh.
+        </span>
+        <div className="ml-auto flex items-center gap-3 text-xs text-slate-500">
+          {vz.backbone_km      && <span>{fmt(vz.backbone_km)} km HQ</span>}
           {vz.backbone_cost_chf && <span>CHF {fmt(vz.backbone_cost_chf)}</span>}
-          <span className="text-gray-600">{open ? '▲' : '▼'}</span>
+          {vz.backbone_co2_kg  && <span>{fmt(vz.backbone_co2_kg)} kg CO₂</span>}
+          <span className="text-slate-600">{open ? '▲' : '▼'}</span>
         </div>
       </button>
+
       {open && (
-        <div className="px-4 pb-3 pt-1 border-t border-gray-800">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
+        <div className="border-t border-slate-800 px-4 pb-3 pt-2">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
             {vz.direct_pharmacies > 0 && (
-              <div className="bg-gray-800/50 rounded p-2 text-xs">
-                <span className="text-blue-400 font-medium">Direkt → {vz.name}</span>
-                <br /><span className="text-gray-400">{vz.direct_pharmacies} Apotheken</span>
-              </div>
+              <MvzCard name={`Direkt → ${vz.name}`} count={vz.direct_pharmacies} items={0} color="blue" />
             )}
             {vz.mvz.map(mvz => (
-              <div key={mvz.name} className="bg-gray-800/50 rounded p-2 text-xs">
-                <div className="flex items-center gap-1.5 mb-1">
-                  <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
-                  <span className="text-amber-300 font-medium">{mvz.name}</span>
-                </div>
-                <div className="text-gray-400 space-y-0.5">
-                  <div>{mvz.pharmacy_count} Apotheken · {fmt(mvz.total_items)} Einh.</div>
-                  {mvz.backbone_km && (
-                    <div className="text-gray-600">
-                      {fmt(mvz.backbone_km)} km · CHF {mvz.backbone_cost_chf && fmt(mvz.backbone_cost_chf)}
-                    </div>
-                  )}
-                </div>
-              </div>
+              <MvzCard key={mvz.name} name={mvz.name} count={mvz.pharmacy_count}
+                       items={mvz.total_items} km={mvz.backbone_km ?? undefined} color="amber" />
             ))}
           </div>
         </div>
       )}
+    </div>
+  )
+}
+
+function MvzCard({ name, count, items, km, color }: {
+  name: string; count: number; items: number; km?: number; color: 'blue'|'amber'
+}) {
+  const c = color === 'blue'
+    ? 'border-blue-800/40 bg-blue-950/20 text-blue-300'
+    : 'border-amber-800/40 bg-amber-950/20 text-amber-300'
+  return (
+    <div className={`rounded-lg border p-2.5 text-xs ${c}`}>
+      <p className="font-semibold mb-1">{name}</p>
+      <p className="text-slate-400">{count} Apotheken</p>
+      {items > 0 && <p className="text-slate-500">{fmt(items)} Einh.</p>}
+      {km && <p className="text-slate-600">{fmt(km)} km</p>}
     </div>
   )
 }

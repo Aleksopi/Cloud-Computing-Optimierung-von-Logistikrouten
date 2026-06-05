@@ -57,7 +57,7 @@ export function InfoSidebar({ feature, onClose, focusedHub, onFocusHub }: InfoSi
         {/* ── Pharmacy ─────────────────────────────────────────────────── */}
         {feature.type === 'pharmacy' && (
           <div className="space-y-1.5">
-            {p.city && <InfoRow icon="📍" label="Stadt"    value={p.city as string} />}
+            {!!p.city && <InfoRow icon="📍" label="Stadt"    value={p.city as string} />}
             <InfoRow icon="🏭" label="Hub"     value={(p.hub_name as string) ?? '—'} />
             <InfoRow icon="📦" label="Bedarf"  value={p.demand != null ? `${p.demand} Einheiten` : 'Nicht berechnet'} />
           </div>
@@ -67,8 +67,8 @@ export function InfoSidebar({ feature, onClose, focusedHub, onFocusHub }: InfoSi
         {feature.type === 'hub' && (
           <div className="space-y-1.5">
             <InfoRow icon="🏷" label="Typ"         value={hubTypeLabel(p.hub_type as string)} />
-            {p.parent_hub      && <InfoRow icon="⬆" label="Übergeordnet"  value={p.parent_hub as string} />}
-            {p.delivery_window && <InfoRow icon="🕗" label="Lieferfenster" value={p.delivery_window as string} />}
+            {!!p.parent_hub      && <InfoRow icon="⬆" label="Übergeordnet"  value={p.parent_hub as string} />}
+            {!!p.delivery_window && <InfoRow icon="🕗" label="Lieferfenster" value={p.delivery_window as string} />}
 
             {Object.keys(vehicleCounts).length > 0 && (
               <>
