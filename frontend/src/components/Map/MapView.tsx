@@ -34,6 +34,12 @@ const DATA_SOURCES = ['assignments', 'routes', 'pharmacies', 'hubs'] as const
 const CLICK_LAYERS = ['pharmacies-layer', 'hubs-layer', 'routes-layer'] as const
 const EMPTY: GeoJSON.FeatureCollection = { type: 'FeatureCollection', features: [] }
 
+interface CacheEntry {
+  data?: GeoJSON.FeatureCollection
+  fetching: boolean
+  key?: string
+}
+
 // ── Component ─────────────────────────────────────────────────────────────────
 
 export function MapView({ pipelineStatus, onFeatureSelect, visibleLayers }: MapViewProps) {
@@ -126,7 +132,7 @@ export function MapView({ pipelineStatus, onFeatureSelect, visibleLayers }: MapV
           'text-field':  ['get', 'name'],
           'text-size':   ['match', ['get', 'hub_type'], 'HQ', 13, 'VZ', 12, 10],
           'text-offset': [0, 1.8], 'text-anchor': 'top',
-          'text-font':   ['Open Sans Bold', 'Arial Unicode MS Regular'],
+          'text-font':   ['Open Sans Semibold'],
           'text-allow-overlap': false,
         },
         paint: {
@@ -192,8 +198,9 @@ export function MapView({ pipelineStatus, onFeatureSelect, visibleLayers }: MapV
   const pipelineStatusRef = useRef(pipelineStatus)
   pipelineStatusRef.current = pipelineStatus
 
-  // { url → { data, fetching } }
-  const cacheRef = useRef<Record<string, { data?: GeoJSON.FeatureCollection; fetching: boolean }>>({})
+  // { url -> cached response }. Pipeline results use a step-based key so reruns
+  // replace stale data instead of reusing an old empty FeatureCollection.
+  const cacheRef = useRef<Record<string, CacheEntry>>({})
 
   const putOnMap = useCallback((srcId: string, data: GeoJSON.FeatureCollection) => {
     dataRef.current[srcId] = data
@@ -203,28 +210,43 @@ export function MapView({ pipelineStatus, onFeatureSelect, visibleLayers }: MapV
     }
   }, [])
 
-  const fetchUrl = useCallback((srcId: string, url: string) => {
-    const entry = cacheRef.current[url] ?? (cacheRef.current[url] = { fetching: false })
-    if (entry.fetching) return
-    if (entry.data) { putOnMap(srcId, entry.data); return }  // already cached — just (re)apply
-    entry.fetching = true
-    fetch(url)
-      .then(r => (r.ok ? r.json() : Promise.reject(r.status)))
+  const fetchUrl = useCallback((srcId: string, url: string, key = url) => {
+    const cached = cacheRef.current[url]
+    if (cached?.data && cached.key === key) { putOnMap(srcId, cached.data); return }
+    if (cached?.fetching && cached.key === key) return
+
+    const entry: CacheEntry = { fetching: true, key }
+    cacheRef.current[url] = entry
+
+    fetch(url, { cache: 'no-store' })
+      .then(r => (r.ok ? r.json() : Promise.reject(new Error(`${r.status} ${r.statusText}`))))
       .then((data: GeoJSON.FeatureCollection) => {
+        if (cacheRef.current[url] !== entry) return
         entry.fetching = false
         entry.data = data
         putOnMap(srcId, data)
       })
-      .catch(() => { entry.fetching = false })
+      .catch(error => {
+        if (cacheRef.current[url] === entry) entry.fetching = false
+        console.warn(`Failed to load map data from ${url}`, error)
+      })
   }, [putOnMap])
 
   const syncData = useCallback(() => {
     const s = pipelineStatusRef.current
     const st = (n: number) => s[n]?.status ?? 'idle'
+    const resultKey = (step: number) =>
+      `${st(step)}:${s[step]?.finished_at ?? s[step]?.started_at ?? 'none'}`
 
     // Reset: clear cached pipeline data when step 1 goes back to idle
     if (st(1) === 'idle') {
-      for (const u of ['/api/results/hubs', '/api/results/assignments', '/api/results/routes']) {
+      for (const u of [
+        '/api/results/pharmacies',
+        '/api/results/pharmacies?demand=1',
+        '/api/results/hubs',
+        '/api/results/assignments',
+        '/api/results/routes',
+      ]) {
         if (cacheRef.current[u]) cacheRef.current[u] = { fetching: false }
       }
       for (const id of ['hubs', 'assignments', 'routes'] as const) {
@@ -235,11 +257,14 @@ export function MapView({ pipelineStatus, onFeatureSelect, visibleLayers }: MapV
       }
     }
 
-    fetchUrl('pharmacies', '/api/results/pharmacies')
-    if (st(1) === 'done') fetchUrl('hubs',        '/api/results/hubs')
-    if (st(2) === 'done') fetchUrl('assignments', '/api/results/assignments')
-    if (st(3) === 'done') fetchUrl('pharmacies',  '/api/results/pharmacies?demand=1')
-    if (st(4) === 'done') fetchUrl('routes',      '/api/results/routes')
+    const pharmacyUrl = st(3) === 'done'
+      ? '/api/results/pharmacies?demand=1'
+      : '/api/results/pharmacies'
+
+    fetchUrl('pharmacies', pharmacyUrl, `pharmacies:${resultKey(1)}:${resultKey(3)}`)
+    if (st(1) === 'done') fetchUrl('hubs', '/api/results/hubs', resultKey(1))
+    if (st(2) === 'done') fetchUrl('assignments', '/api/results/assignments', resultKey(2))
+    if (st(4) === 'done') fetchUrl('routes',      '/api/results/routes', resultKey(4))
   }, [fetchUrl])
 
   // Keep a ref so map.on('load') can call the latest version

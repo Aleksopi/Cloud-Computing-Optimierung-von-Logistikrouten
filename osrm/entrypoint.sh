@@ -8,8 +8,8 @@ if [ ! -f "$OSRM_FILE" ]; then
     echo "OSRM graph not found — processing from OSM data..."
 
     if [ ! -f "$PBF_FILE" ]; then
-        echo "PBF not found — downloading Switzerland roads from Geofabrik..."
-        wget -q --show-progress -O "$PBF_FILE" \
+        echo "PBF not found — downloading Switzerland roads from Geofabrik (~170 MB)..."
+        curl -L --progress-bar -o "$PBF_FILE" \
             "https://download.geofabrik.de/europe/switzerland-latest.osm.pbf"
     fi
 
