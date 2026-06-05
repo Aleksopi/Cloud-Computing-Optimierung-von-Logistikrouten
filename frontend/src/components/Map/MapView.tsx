@@ -30,6 +30,14 @@ export const VEHICLE_ROUTE_COLOR: Array<[string, string]> = [
   ['Zug',       COLORS.zugRoute],
 ]
 
+// Data-driven route colour by vehicle type (reused for highlight resets)
+const ROUTE_COLOR_EXPR: any = ['match', ['get', 'vehicle_type'],
+  ...VEHICLE_ROUTE_COLOR.flat(), COLORS.routeFallback]
+
+// Hub focus (#5): the hub's own (outbound) routes vs its inbound supply route
+export const HUB_OUTBOUND_COLOR = '#f97316' // orange — alle Routen des Hubs
+export const HUB_INBOUND_COLOR  = '#22c55e' // green  — Zulieferung (woher die Ware kommt)
+
 const DIM = 0.07
 
 interface MapViewProps {
@@ -41,6 +49,7 @@ interface MapViewProps {
   focusedVehicleId:  string | null      // show only this vehicle's route
   focusedPharmacyId: number | null      // show only this pharmacy's assignment
   vehicleTypeFilter: Set<string>
+  backboneTypeFilter: Set<string>       // Hauptlauf filter by vehicle type
   highlight:         HighlightState | null
 }
 
@@ -73,7 +82,7 @@ interface CacheEntry { data?: GeoJSON.FeatureCollection; fetching: boolean; key?
 export function MapView({
   pipelineStatus, onFeatureSelect, visibleLayers,
   isAnyRunning, focusedHub, focusedVehicleId, focusedPharmacyId,
-  vehicleTypeFilter, highlight,
+  vehicleTypeFilter, backboneTypeFilter, highlight,
 }: MapViewProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const mapRef       = useRef<maplibregl.Map | null>(null)
@@ -95,8 +104,7 @@ export function MapView({
     map.addControl(new maplibregl.NavigationControl(), 'top-right')
     map.addControl(new maplibregl.ScaleControl({ unit: 'metric' }), 'bottom-right')
 
-    const routeColor: any = ['match', ['get', 'vehicle_type'],
-      ...VEHICLE_ROUTE_COLOR.flat(), COLORS.routeFallback]
+    const routeColor: any = ROUTE_COLOR_EXPR
 
     map.on('load', () => {
       for (const id of DATA_SOURCES) {
@@ -305,7 +313,18 @@ export function MapView({
         map.setFilter('assignments-layer', null)
       }
     }
-  }, [focusedHub, focusedVehicleId, focusedPharmacyId, vehicleTypeFilter])
+
+    // Hauptlauf (backbone) layers: keep the tier filter, narrow by vehicle type
+    const bbVeh: any = backboneTypeFilter.size > 0
+      ? ['in', ['get', 'vehicle_type'], ['literal', [...backboneTypeFilter]]] : null
+    const setBb = (layer: string, tier: string) => {
+      if (!map.getLayer(layer)) return
+      const tierF: any = ['==', ['get', 'backbone_tier'], tier]
+      map.setFilter(layer, bbVeh ? ['all', tierF, bbVeh] : tierF)
+    }
+    setBb('backbone-hq-vz-layer', 'hq_vz')
+    setBb('backbone-vz-mvz-layer', 'vz_mvz')
+  }, [focusedHub, focusedVehicleId, focusedPharmacyId, vehicleTypeFilter, backboneTypeFilter])
   const applyFilterRef = useRef(applyFilter); applyFilterRef.current = applyFilter
   useEffect(() => { applyFilter() }, [applyFilter])
 
@@ -322,11 +341,16 @@ export function MapView({
       if (map.getLayer(layer)) map.setPaintProperty(layer, prop, val)
     }
 
+    // Restore base data-driven colours first; focus modes below may override.
+    set('routes-layer',          'line-color', ROUTE_COLOR_EXPR)
+    set('backbone-hq-vz-layer',  'line-color', COLORS.backboneHqVz)
+    set('backbone-vz-mvz-layer', 'line-color', COLORS.backboneVzMvz)
+
     const inactive = !h || (h.hubs.length === 0 && h.routeId == null && h.pharmacyId == null && !h.vehicleId)
     if (inactive) {
       set('routes-layer',          'line-opacity', 0.9);  set('routes-layer', 'line-width', 3)
-      set('backbone-hq-vz-layer',  'line-opacity', 0.85)
-      set('backbone-vz-mvz-layer', 'line-opacity', 0.8)
+      set('backbone-hq-vz-layer',  'line-opacity', 0.85); set('backbone-hq-vz-layer',  'line-width', 4)
+      set('backbone-vz-mvz-layer', 'line-opacity', 0.8);  set('backbone-vz-mvz-layer', 'line-width', 2.5)
       set('assignments-layer',     'line-color',   ASSIGN_COLOR_EXPR)
       set('assignments-layer',     'line-width',   1.2)
       set('assignments-layer',     'line-opacity', 0.35)
@@ -372,8 +396,11 @@ export function MapView({
         set('routes-layer', 'line-opacity', ['case', inHubs('hub_name'), 0.9, DIM])
         set('routes-layer', 'line-width',   ['case', inHubs('hub_name'), 3.5, 2])
       }
-      set('backbone-hq-vz-layer',  'line-opacity', ['case', bbRelevant, 0.9, DIM])
-      set('backbone-vz-mvz-layer', 'line-opacity', ['case', bbRelevant, 0.85, DIM])
+      // Upstream chain (mVZ→VZ and VZ→HQ) — prominent, in their own colours
+      set('backbone-hq-vz-layer',  'line-opacity', ['case', bbRelevant, 0.95, DIM])
+      set('backbone-hq-vz-layer',  'line-width',   ['case', bbRelevant, 5, 2])
+      set('backbone-vz-mvz-layer', 'line-opacity', ['case', bbRelevant, 0.9, DIM])
+      set('backbone-vz-mvz-layer', 'line-width',   ['case', bbRelevant, 4, 2])
       // Highlight only this pharmacy
       set('pharmacies-layer', 'circle-opacity', ['case', ['==', ['get', 'id'], h.pharmacyId], 1.0, 0.1])
       set('pharmacies-layer', 'circle-stroke-opacity', ['case', ['==', ['get', 'id'], h.pharmacyId], 1.0, 0.1])
@@ -383,6 +410,34 @@ export function MapView({
         set('hubs-layer',  'circle-stroke-opacity', hubMatch)
         set('hubs-labels', 'text-opacity',          hubMatch)
       }
+      return
+    }
+
+    // ── Hub focus (#5): own (outbound) routes + inbound supply, two colours ──
+    if (h.primaryHub) {
+      const ph = h.primaryHub
+      const isIn:  any = ['in', ph, ['get', 'to_hubs']]      // someone delivers TO this hub
+      const isOut: any = ['==', ['get', 'from_hub'], ph]     // this hub delivers onward
+      const bbColor:   any = ['case', isIn, HUB_INBOUND_COLOR, isOut, HUB_OUTBOUND_COLOR, COLORS.backbone]
+      const bbOpacity: any = ['case', ['any', isIn, isOut], 0.95, DIM]
+      const bbWidth:   any = ['case', isIn, 5.5, isOut, 4, 1.5]
+      for (const l of ['backbone-hq-vz-layer', 'backbone-vz-mvz-layer']) {
+        set(l, 'line-color', bbColor); set(l, 'line-opacity', bbOpacity); set(l, 'line-width', bbWidth)
+      }
+      // last-mile routes are already filtered to this hub → all outbound
+      set('routes-layer', 'line-color',   HUB_OUTBOUND_COLOR)
+      set('routes-layer', 'line-opacity', 0.95)
+      set('routes-layer', 'line-width',   4)
+      set('assignments-layer', 'line-color',   ASSIGN_COLOR_EXPR)
+      set('assignments-layer', 'line-width',   1.2)
+      set('assignments-layer', 'line-opacity', hubs.length ? ['case', inHubs('hub_name'), 0.5, DIM] : 0.3)
+      const phMatch: any = hubs.length ? ['case', inHubs('hub_name'), 1, 0.12] : 1
+      set('pharmacies-layer', 'circle-opacity', phMatch)
+      set('pharmacies-layer', 'circle-stroke-opacity', phMatch)
+      const hubMatch: any = hubs.length ? ['case', inHubs('name'), 1, 0.22] : 1
+      set('hubs-layer',  'circle-opacity',       hubMatch)
+      set('hubs-layer',  'circle-stroke-opacity', hubMatch)
+      set('hubs-labels', 'text-opacity',          hubMatch)
       return
     }
 
@@ -447,7 +502,7 @@ function tooltipHtml(feat: maplibregl.MapGeoJSONFeature): string {
     h += `<div class="t-row">${p.total_km} km · CHF ${p.total_cost_chf}</div>`
   } else if (lid === 'backbone-hq-vz-layer' || lid === 'backbone-vz-mvz-layer') {
     const t = lid.includes('hq') ? 'HQ → VZ' : 'VZ → mVZ'
-    h = `<strong>Lieferkette ${t}</strong>`
+    h = `<strong>Hauptlauf ${t}</strong>`
     h += `<div class="t-row">${esc(p.vehicle_type)} · ${p.stop_count} Ziele</div>`
     h += `<div class="t-row">${p.total_km} km · ${p.total_items} Einheiten</div>`
   }

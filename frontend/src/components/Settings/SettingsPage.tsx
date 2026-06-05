@@ -2,7 +2,17 @@ import { useCallback, useEffect, useState } from 'react'
 import { api } from '../../api/client'
 import type { VehicleConfig, VehicleConfigCreate, SystemConfigEntry, TrafficInfo } from '../../types'
 
+const SETTINGS_TABS = [
+  { id: 'fleet',      label: 'Flotte'        },
+  { id: 'weights',    label: 'Gewichtung'    },
+  { id: 'parameters', label: 'Parameter'     },
+  { id: 'traffic',    label: 'Live-Verkehr'  },
+  { id: 'hours',      label: 'Öffnungszeiten' },
+] as const
+type SettingsTab = typeof SETTINGS_TABS[number]['id']
+
 export function SettingsPage() {
+  const [tab,       setTab]       = useState<SettingsTab>('fleet')
   const [vehicles,  setVehicles]  = useState<VehicleConfig[]>([])
   const [sysConf,   setSysConf]   = useState<SystemConfigEntry[]>([])
   const [loading,   setLoading]   = useState(true)
@@ -78,14 +88,14 @@ export function SettingsPage() {
 
   return (
     <div className="h-full overflow-y-auto bg-slate-950 text-slate-100">
-      <div className="max-w-6xl mx-auto px-6 py-6 space-y-8">
+      <div className="max-w-6xl mx-auto px-6 py-6 space-y-6">
 
         {/* Page header */}
         <div className="flex items-center justify-between">
           <div>
             <h2 className="text-lg font-bold text-white">Systemeinstellungen</h2>
             <p className="text-xs text-slate-500 mt-0.5">
-              Fahrzeugflotte &amp; Optimierungsparameter · Änderungen wirken ab nächstem Step 3/4
+              Flotte, Gewichtung &amp; Parameter · Änderungen wirken ab nächstem Step 2/3/4
             </p>
           </div>
           <div className="flex items-center gap-3">
@@ -100,6 +110,18 @@ export function SettingsPage() {
           </div>
         </div>
 
+        {/* Tab bar */}
+        <div className="flex items-center gap-1 border-b border-slate-800">
+          {SETTINGS_TABS.map(t => (
+            <button key={t.id} onClick={() => setTab(t.id)}
+              className={`px-4 py-2 text-sm font-medium rounded-t-lg border-b-2 -mb-px transition-colors
+                ${tab === t.id ? 'text-white border-blue-500 bg-slate-800/60'
+                  : 'text-slate-400 border-transparent hover:text-slate-200 hover:bg-slate-800/30'}`}>
+              {t.label}
+            </button>
+          ))}
+        </div>
+
         {error && (
           <div className="flex items-center gap-2 text-sm text-red-400 bg-red-950/40 border border-red-800/40 rounded-xl px-4 py-3">
             <span className="text-red-500">⚠</span> {error}
@@ -108,6 +130,7 @@ export function SettingsPage() {
         )}
 
         {/* ── Vehicle Fleet ───────────────────────────────────────────── */}
+        {tab === 'fleet' && (
         <section className="bg-slate-900/60 border border-slate-700/60 rounded-xl overflow-hidden">
           <div className="flex items-center justify-between px-5 py-4 border-b border-slate-700/60 bg-slate-800/40">
             <div>
@@ -144,92 +167,54 @@ export function SettingsPage() {
             </table>
           </div>
         </section>
+        )}
 
-        {/* ── System config ────────────────────────────────────────────── */}
+        {/* ── Gewichtung (interactive sliders) ─────────────────────────── */}
+        {tab === 'weights' && (
+          <WeightsTab sysConf={sysConf} setSysConf={setSysConf} flashSaved={flashSaved} setError={setError} />
+        )}
+
+        {/* ── Logistik-Parameter ───────────────────────────────────────── */}
+        {tab === 'parameters' && (
         <section className="bg-slate-900/60 border border-slate-700/60 rounded-xl overflow-hidden">
           <div className="px-5 py-4 border-b border-slate-700/60 bg-slate-800/40">
-            <h3 className="text-sm font-semibold text-slate-200">Optimierungsparameter</h3>
-            <p className="text-xs text-slate-500 mt-0.5">Routing-Gewichte, Warenbedarf und Verkehrsfaktoren</p>
+            <h3 className="text-sm font-semibold text-slate-200">Logistik-Parameter</h3>
+            <p className="text-xs text-slate-500 mt-0.5">Hubs, Warenbedarf, Schicht, statischer Verkehrsfaktor und Lagerkosten</p>
           </div>
-
           <div className="px-5 py-5">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-
-              {/* Demand + Routing */}
-              <div className="space-y-4">
-                <h4 className="text-xs font-semibold text-slate-400 uppercase tracking-wide">Logistikparameter</h4>
-                {[
-                  'n_vz', 'n_mvz',
-                  'vz_capacity', 'mvz_capacity',
-                  'hq_direct_radius_km',
-                  'population_per_item', 'max_catchment_km', 'vz_hard_radius_km',
-                  'default_demand_est',
-                  'shift_start', 'shift_hours', 'traffic_factor', 'co2_shadow_chf',
-                ].map(key => (
-                  <SysField key={key} conf={sysConf.find(c => c.key === key)}
-                             value={sysVal(key)} onChange={v => setSysEdits(p => ({...p, [key]: v}))} />
-                ))}
-              </div>
-
-              {/* Optimisation weights */}
-              <div className="space-y-4">
-                <h4 className="text-xs font-semibold text-slate-400 uppercase tracking-wide">Optimierungsgewichte</h4>
-                {['opt_weight_cost','opt_weight_time','opt_weight_env'].map(key => (
-                  <SysField key={key} conf={sysConf.find(c => c.key === key)}
-                             value={sysVal(key)} onChange={v => setSysEdits(p => ({...p, [key]: v}))} />
-                ))}
-
-                {/* Weight sum */}
-                {(() => {
-                  const sum = ['opt_weight_cost','opt_weight_time','opt_weight_env']
-                    .reduce((a, k) => a + parseFloat(sysVal(k) || '0'), 0)
-                  const ok = Math.abs(sum - 1.0) < 0.01
-                  return (
-                    <div className={`flex items-center gap-2 text-xs rounded-lg px-3 py-2 border ${
-                      ok ? 'bg-emerald-950/30 border-emerald-800/40 text-emerald-400'
-                         : 'bg-amber-950/30 border-amber-800/40 text-amber-400'
-                    }`}>
-                      <span>{ok ? '✓' : '⚠'}</span>
-                      <span>Summe: {sum.toFixed(2)} {ok ? '(korrekt)' : '— sollte 1.00 sein'}</span>
-                    </div>
-                  )
-                })()}
-
-                {/* Score formula */}
-                <div className="bg-slate-800/50 border border-slate-700/40 rounded-xl p-3 space-y-1.5">
-                  <p className="text-xs font-semibold text-slate-300">Score-Formel (lower = better)</p>
-                  <p className="text-xs text-slate-500 font-mono leading-relaxed">
-                    w_cost × (km × CHF/km)<br/>
-                    + w_time × (h × Fahrerlohn)<br/>
-                    + w_env × (CO₂ × Schattenpreis)
-                  </p>
-                  <p className="text-xs text-slate-600 pt-1">
-                    traffic_factor skaliert alle Fahrtzeiten — Hook für Live-Verkehr.
-                  </p>
-                </div>
-              </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-4">
+              {[
+                'n_vz', 'n_mvz',
+                'vz_capacity', 'mvz_capacity',
+                'hq_direct_radius_km',
+                'population_per_item', 'max_catchment_km', 'vz_hard_radius_km',
+                'default_demand_est',
+                'shift_start', 'shift_hours', 'traffic_factor', 'co2_shadow_chf',
+                'warehouse_cost_hq', 'warehouse_cost_vz', 'warehouse_cost_mvz',
+                'warehouse_density_cost', 'warehouse_density_radius_km', 'warehouse_density_weight',
+              ].map(key => (
+                <SysField key={key} conf={sysConf.find(c => c.key === key)}
+                           value={sysVal(key)} onChange={v => setSysEdits(p => ({...p, [key]: v}))} />
+              ))}
             </div>
-
             <div className="flex justify-end mt-6">
-              <button
-                onClick={saveSystemConfig}
-                disabled={saving || Object.keys(sysEdits).length === 0}
+              <button onClick={saveSystemConfig} disabled={saving || Object.keys(sysEdits).length === 0}
                 className={`text-sm px-6 py-2 rounded-lg font-semibold transition-all ${
                   Object.keys(sysEdits).length > 0
                     ? 'bg-blue-600 hover:bg-blue-500 text-white shadow-sm shadow-blue-900/50'
-                    : 'bg-slate-800 text-slate-600 cursor-not-allowed'
-                }`}
-              >
+                    : 'bg-slate-800 text-slate-600 cursor-not-allowed'}`}>
                 {saving ? 'Speichern…' : 'Einstellungen speichern'}
               </button>
             </div>
           </div>
         </section>
+        )}
 
         {/* ── Live traffic ─────────────────────────────────────────────── */}
-        <TrafficSection />
+        {tab === 'traffic' && <TrafficSection />}
 
         {/* ── Opening hours ────────────────────────────────────────────── */}
+        {tab === 'hours' && (
         <section className="bg-slate-900/60 border border-slate-700/60 rounded-xl overflow-hidden">
           <div className="px-5 py-4 border-b border-slate-700/60 bg-slate-800/40">
             <h3 className="text-sm font-semibold text-slate-200">Öffnungszeiten</h3>
@@ -286,6 +271,7 @@ export function SettingsPage() {
             </div>
           </div>
         </section>
+        )}
 
       </div>
     </div>
@@ -414,6 +400,164 @@ function SysField({ conf, value, onChange }: {
              className="w-full bg-slate-800 text-slate-200 text-sm rounded-lg px-3 py-2 border border-slate-700
                         focus:outline-none focus:border-blue-500 transition-colors" />
     </div>
+  )
+}
+
+/* ── Gewichtung der Optimierungsfaktoren ─────────────────────────────────────── */
+
+type Weights = { cost: number; time: number; env: number }
+const WKEYS = ['cost', 'time', 'env'] as const
+
+const WMETA: Record<keyof Weights, { label: string; color: string; desc: string }> = {
+  cost: { label: 'Kosten',  color: '#3b82f6', desc: 'Fahrtkosten (km × CHF/km)' },
+  time: { label: 'Zeit',    color: '#f59e0b', desc: 'Fahrzeit × Fahrerlohn' },
+  env:  { label: 'Umwelt',  color: '#10b981', desc: 'CO₂ × Schattenpreis' },
+}
+
+const WEIGHT_PRESETS: { label: string; w: Weights }[] = [
+  { label: 'Kostenfokus',  w: { cost: 0.70, time: 0.20, env: 0.10 } },
+  { label: 'Ausgewogen',   w: { cost: 0.40, time: 0.35, env: 0.25 } },
+  { label: 'Zeitkritisch', w: { cost: 0.20, time: 0.65, env: 0.15 } },
+  { label: 'Öko',          w: { cost: 0.20, time: 0.20, env: 0.60 } },
+]
+
+function readWeights(sysConf: SystemConfigEntry[]): Weights {
+  const g = (k: string, d: number) => {
+    const v = parseFloat(sysConf.find(c => c.key === k)?.value ?? '')
+    return isNaN(v) ? d : v
+  }
+  return { cost: g('opt_weight_cost', 0.40), time: g('opt_weight_time', 0.35), env: g('opt_weight_env', 0.25) }
+}
+
+function WeightsTab({ sysConf, setSysConf, flashSaved, setError }: {
+  sysConf: SystemConfigEntry[]
+  setSysConf: (s: SystemConfigEntry[]) => void
+  flashSaved: () => void
+  setError: (e: string | null) => void
+}) {
+  const [saved, setSaved] = useState<Weights>(() => readWeights(sysConf))
+  const [w, setW]         = useState<Weights>(saved)
+  const [busy, setBusy]   = useState(false)
+
+  useEffect(() => { const r = readWeights(sysConf); setSaved(r); setW(r) }, [sysConf])
+
+  // Move one weight; rebalance the other two to keep the sum at 1.0
+  const setWeight = (key: keyof Weights, value: number) => {
+    const v = Math.max(0, Math.min(1, value))
+    const others = WKEYS.filter(k => k !== key)
+    const rest = 1 - v
+    const othersSum = others.reduce((s, k) => s + w[k], 0)
+    const next: Weights = { ...w, [key]: v }
+    if (othersSum <= 1e-6) others.forEach(k => { next[k] = rest / others.length })
+    else                   others.forEach(k => { next[k] = rest * (w[k] / othersSum) })
+    setW(next)
+  }
+
+  const dirty = WKEYS.some(k => Math.abs(w[k] - saved[k]) > 0.005)
+
+  const save = async () => {
+    setBusy(true); setError(null)
+    try {
+      const res = await api.updateSystemConfig({
+        opt_weight_cost: w.cost.toFixed(3),
+        opt_weight_time: w.time.toFixed(3),
+        opt_weight_env:  w.env.toFixed(3),
+      })
+      setSysConf(res); flashSaved()
+    } catch (e) { setError(e instanceof Error ? e.message : String(e)) }
+    finally { setBusy(false) }
+  }
+
+  const pct = (x: number) => Math.round(x * 100)
+
+  return (
+    <section className="bg-slate-900/60 border border-slate-700/60 rounded-xl overflow-hidden">
+      <div className="px-5 py-4 border-b border-slate-700/60 bg-slate-800/40">
+        <h3 className="text-sm font-semibold text-slate-200">Gewichtung der Optimierungsfaktoren</h3>
+        <p className="text-xs text-slate-500 mt-0.5">
+          Bestimmt, wie stark Kosten, Zeit und Umwelt die Routenwahl (Schritt 4) beeinflussen. Summe immer 100 %.
+        </p>
+      </div>
+
+      <div className="px-5 py-6 space-y-6">
+        {/* Stacked proportion bar */}
+        <div>
+          <div className="flex h-6 rounded-lg overflow-hidden border border-slate-700/60">
+            {WKEYS.map(k => (
+              <div key={k} className="flex items-center justify-center text-[10px] font-semibold text-white/90 transition-all"
+                   style={{ width: `${w[k] * 100}%`, backgroundColor: WMETA[k].color }}>
+                {w[k] >= 0.12 ? `${pct(w[k])}%` : ''}
+              </div>
+            ))}
+          </div>
+          <div className="flex gap-4 mt-2">
+            {WKEYS.map(k => (
+              <span key={k} className="flex items-center gap-1.5 text-xs text-slate-400">
+                <span className="w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: WMETA[k].color }} />
+                {WMETA[k].label} {pct(w[k])}%
+              </span>
+            ))}
+          </div>
+        </div>
+
+        {/* Sliders */}
+        <div className="space-y-5">
+          {WKEYS.map(k => (
+            <div key={k}>
+              <div className="flex items-center justify-between mb-1.5">
+                <div>
+                  <span className="text-sm font-medium text-slate-200">{WMETA[k].label}</span>
+                  <span className="text-xs text-slate-500 ml-2">{WMETA[k].desc}</span>
+                </div>
+                <span className="text-sm font-mono font-semibold" style={{ color: WMETA[k].color }}>{pct(w[k])}%</span>
+              </div>
+              <input type="range" min={0} max={1} step={0.01} value={w[k]}
+                     onChange={e => setWeight(k, parseFloat(e.target.value))}
+                     className="w-full" style={{ accentColor: WMETA[k].color }} />
+            </div>
+          ))}
+        </div>
+
+        {/* Presets */}
+        <div>
+          <p className="text-xs font-medium text-slate-400 mb-2">Voreinstellungen</p>
+          <div className="flex flex-wrap gap-2">
+            {WEIGHT_PRESETS.map(p => {
+              const active = WKEYS.every(k => Math.abs(w[k] - p.w[k]) < 0.005)
+              return (
+                <button key={p.label} onClick={() => setW(p.w)}
+                  className={`text-xs px-3 py-1.5 rounded-lg border transition-colors ${
+                    active ? 'bg-blue-600/20 border-blue-600/50 text-blue-300'
+                           : 'border-slate-700 text-slate-400 hover:border-slate-500 hover:text-slate-200'}`}>
+                  {p.label}
+                </button>
+              )
+            })}
+          </div>
+        </div>
+
+        {/* Score formula */}
+        <div className="bg-slate-800/50 border border-slate-700/40 rounded-xl p-3 space-y-1.5">
+          <p className="text-xs font-semibold text-slate-300">Score-Formel (niedriger = besser)</p>
+          <p className="text-xs text-slate-500 font-mono leading-relaxed">
+            <span style={{ color: WMETA.cost.color }}>{w.cost.toFixed(2)}</span> × (km × CHF/km)
+            + <span style={{ color: WMETA.time.color }}>{w.time.toFixed(2)}</span> × (h × Fahrerlohn)
+            + <span style={{ color: WMETA.env.color }}>{w.env.toFixed(2)}</span> × (CO₂ × Schattenpreis)
+          </p>
+        </div>
+
+        {/* Save */}
+        <div className="flex items-center justify-end gap-3">
+          {dirty && <span className="text-xs text-amber-400">Ungespeicherte Änderungen</span>}
+          <button onClick={save} disabled={busy || !dirty}
+            className={`text-sm px-6 py-2 rounded-lg font-semibold transition-all ${
+              dirty ? 'bg-blue-600 hover:bg-blue-500 text-white shadow-sm shadow-blue-900/50'
+                    : 'bg-slate-800 text-slate-600 cursor-not-allowed'}`}>
+            {busy ? 'Speichern…' : 'Gewichtung speichern'}
+          </button>
+        </div>
+      </div>
+    </section>
   )
 }
 

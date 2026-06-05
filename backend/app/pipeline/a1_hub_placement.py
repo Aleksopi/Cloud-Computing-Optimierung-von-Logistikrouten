@@ -54,7 +54,12 @@ def _greedy_pmedian(
     min_spacing_km: float,
     min_hq_dist_km: float,
     hq_idx: int,
+    density_norm: np.ndarray | None = None,
+    warehouse_weight: float = 0.0,
 ) -> list[int]:
+    """Greedy p-median. When ``density_norm``/``warehouse_weight`` are given,
+    candidates in densely-populated (expensive-to-build) locations are penalised
+    so hubs are pulled towards cheaper land while still covering demand."""
     pharm_arr = np.array(pharmacy_idxs)
     w = weights.copy()
     current_min = np.full(len(pharmacy_idxs), np.inf)
@@ -65,7 +70,8 @@ def _greedy_pmedian(
     selected: list[int] = []
 
     for _ in range(n_hubs):
-        best_gain, best_c = -np.inf, None
+        # Phase 1 — collect the access-gain of every eligible candidate
+        cand_gains: list[tuple[int, float]] = []
         for c in candidate_idxs:
             if c in placed_all or c in selected:
                 continue
@@ -74,10 +80,22 @@ def _greedy_pmedian(
             if any(D[c, s] < min_spacing_km for s in placed_all + selected):
                 continue
             gain = float(w @ np.maximum(0.0, current_min - D[c, pharm_arr]))
-            if gain > best_gain:
-                best_gain, best_c = gain, c
+            cand_gains.append((c, gain))
+        if not cand_gains:
+            break
+
+        # Phase 2 — net score = access-gain − warehouse-cost penalty (∝ best gain)
+        max_gain = max((g for _, g in cand_gains), default=0.0) or 1e-9
+        best_c, best_score = None, -np.inf
+        for c, gain in cand_gains:
+            penalty = (warehouse_weight * max_gain * float(density_norm[c])
+                       if density_norm is not None else 0.0)
+            score = gain - penalty
+            if score > best_score:
+                best_score, best_c = score, c
         if best_c is None:
             break
+
         selected.append(best_c)
         placed_all.append(best_c)
         current_min = np.minimum(current_min, D[best_c, pharm_arr])
@@ -93,7 +111,18 @@ def run_hub_placement(pharmacies: list[Pharmacy], db) -> None:
     vz_capacity   = int(float(sys_raw.get("vz_capacity",   "600")))
     mvz_capacity  = int(float(sys_raw.get("mvz_capacity",  "125")))
     demand_est    = float(sys_raw.get("default_demand_est", "3"))
-    logger.info(f"[Step 2] Config: {n_vz} VZ (cap {vz_capacity}) + {n_mvz} mVZ (cap {mvz_capacity})")
+    # Location-dependent warehouse costs (denser surroundings = pricier land)
+    wh_cost_hq    = float(sys_raw.get("warehouse_cost_hq",   "4000"))
+    wh_cost_vz    = float(sys_raw.get("warehouse_cost_vz",   "1500"))
+    wh_cost_mvz   = float(sys_raw.get("warehouse_cost_mvz",  "500"))
+    wh_dens_cost  = float(sys_raw.get("warehouse_density_cost",   "4.0"))
+    wh_dens_radius= float(sys_raw.get("warehouse_density_radius_km", "8.0"))
+    wh_weight     = float(sys_raw.get("warehouse_density_weight", "0.35"))
+    # Per-hub delivery shift (seeded from the global default → editable per hub later)
+    shift_start   = float(sys_raw.get("shift_start", "8.0"))
+    shift_hours   = float(sys_raw.get("shift_hours", "8.0"))
+    logger.info(f"[Step 2] Config: {n_vz} VZ (cap {vz_capacity}) + {n_mvz} mVZ (cap {mvz_capacity}) | "
+                f"Lagerkosten-Gewicht {wh_weight}")
     # Hub opening hours from config
     hub_hours = {
         "HQ":  (float(sys_raw.get("hub_hq_open",  "6.0")),  float(sys_raw.get("hub_hq_close",  "22.0"))),
@@ -125,7 +154,24 @@ def run_hub_placement(pharmacies: list[Pharmacy], db) -> None:
         f"max={demand_weights.max():.1f} mean={demand_weights.mean():.1f}"
     )
 
-    logger.info(f"[Step 2] Placing {n_vz} VZs (demand-weighted)…")
+    # ── Local demand density per candidate (land-price proxy) ──────────────────
+    # density[i] = total demand of pharmacies within wh_dens_radius of point i.
+    # Denser surroundings ⇒ more expensive warehouse ⇒ penalised in placement.
+    pharm_arr = np.array(pharm_idxs)
+    density = np.zeros(len(all_coords))
+    for c in pharm_idxs:
+        density[c] = float(demand_weights[D[c, pharm_arr] <= wh_dens_radius].sum())
+    density[hq_idx] = float(demand_weights[D[hq_idx, pharm_arr] <= wh_dens_radius].sum())
+    max_density = max(float(density[pharm_arr].max()), 1.0)
+    density_norm = density / max_density
+    logger.info(f"[Step 2] Local density: max={max_density:.0f} units within {wh_dens_radius} km")
+
+    # Warehouse cost (CHF) of placing a hub of `base` cost at global index `idx`
+    # (cast away numpy scalar so psycopg2 can serialise it)
+    def warehouse_cost(idx: int, base: float) -> float:
+        return round(float(base) + float(density[idx]) * wh_dens_cost, 2)
+
+    logger.info(f"[Step 2] Placing {n_vz} VZs (demand-weighted, cost-aware)…")
     vz_indices = _greedy_pmedian(
         candidate_idxs=pharm_idxs,
         pharmacy_idxs=pharm_idxs,
@@ -136,9 +182,11 @@ def run_hub_placement(pharmacies: list[Pharmacy], db) -> None:
         min_spacing_km=VZ_MIN_SPACING_KM,
         min_hq_dist_km=VZ_MIN_DIST_FROM_HQ_KM,
         hq_idx=hq_idx,
+        density_norm=density_norm,
+        warehouse_weight=wh_weight,
     )
 
-    logger.info(f"[Step 2] Placing {n_mvz} Mini-VZs (demand-weighted)…")
+    logger.info(f"[Step 2] Placing {n_mvz} Mini-VZs (demand-weighted, cost-aware)…")
     mini_vz_indices = _greedy_pmedian(
         candidate_idxs=pharm_idxs,
         pharmacy_idxs=pharm_idxs,
@@ -149,6 +197,8 @@ def run_hub_placement(pharmacies: list[Pharmacy], db) -> None:
         min_spacing_km=MINI_VZ_MIN_SPACING_KM,
         min_hq_dist_km=HUB_MIN_DIST_FROM_HQ_KM,
         hq_idx=hq_idx,
+        density_norm=density_norm,
+        warehouse_weight=wh_weight,
     )
 
     # Persist hubs (with configurable warehouse capacity + opening hours)
@@ -162,25 +212,31 @@ def run_hub_placement(pharmacies: list[Pharmacy], db) -> None:
     total_demand = int(sum(float(p.demand or demand_est) for p in pharmacies))
     db.add(Hub(name=settings.hq_name, hub_type="HQ", lat=hq[0], lon=hq[1],
                capacity=total_demand,
-               open_hour=hq_o, close_hour=hq_c))
+               open_hour=hq_o, close_hour=hq_c,
+               shift_start=shift_start, shift_hours=shift_hours,
+               warehouse_cost=warehouse_cost(hq_idx, wh_cost_hq)))
 
     vz_list: list[tuple[str, float, float]] = []
     for i, vidx in enumerate(vz_indices, 1):
         lat, lon = all_coords[vidx]
         name = f"VZ_{i}"
         db.add(Hub(name=name, hub_type="VZ", lat=round(lat, 6), lon=round(lon, 6),
-                   capacity=vz_capacity, open_hour=vz_o, close_hour=vz_c))
+                   capacity=vz_capacity, open_hour=vz_o, close_hour=vz_c,
+                   shift_start=shift_start, shift_hours=shift_hours,
+                   warehouse_cost=warehouse_cost(vidx, wh_cost_vz)))
         vz_list.append((name, lat, lon))
-        logger.info(f"  {name} → ({lat:.4f}, {lon:.4f})")
+        logger.info(f"  {name} → ({lat:.4f}, {lon:.4f}) · Lager CHF {warehouse_cost(vidx, wh_cost_vz):.0f}")
 
     mini_list: list[tuple[str, float, float]] = []
     for i, midx in enumerate(mini_vz_indices, 1):
         lat, lon = all_coords[midx]
         name = f"mVZ_{i}"
         db.add(Hub(name=name, hub_type="mVZ", lat=round(lat, 6), lon=round(lon, 6),
-                   capacity=mvz_capacity, open_hour=mvz_o, close_hour=mvz_c))
+                   capacity=mvz_capacity, open_hour=mvz_o, close_hour=mvz_c,
+                   shift_start=shift_start, shift_hours=shift_hours,
+                   warehouse_cost=warehouse_cost(midx, wh_cost_mvz)))
         mini_list.append((name, lat, lon))
-        logger.info(f"  {name} → ({lat:.4f}, {lon:.4f})")
+        logger.info(f"  {name} → ({lat:.4f}, {lon:.4f}) · Lager CHF {warehouse_cost(midx, wh_cost_mvz):.0f}")
 
     db.commit()
 

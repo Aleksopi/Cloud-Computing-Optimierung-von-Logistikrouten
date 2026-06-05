@@ -23,7 +23,7 @@ export function InfoSidebar({
   const badge =
     feature.type === 'pharmacy' ? { label: 'Apotheke',    cls: 'text-blue-300   bg-blue-500/10   border-blue-500/30'   }
     : feature.type === 'hub'    ? { label: hubLabel(p.hub_type), cls: 'text-violet-300 bg-violet-500/10 border-violet-500/30' }
-    : isBackbone                ? { label: 'Lieferkette', cls: 'text-rose-300   bg-rose-500/10   border-rose-500/30'   }
+    : isBackbone                ? { label: 'Hauptlauf', cls: 'text-rose-300   bg-rose-500/10   border-rose-500/30'   }
     : { label: p.vehicle_type ?? 'Route', cls: 'text-cyan-300 bg-cyan-500/10 border-cyan-500/30' }
 
   let vehicleCounts: Record<string, number> = {}
@@ -75,7 +75,7 @@ export function InfoSidebar({
                 Lieferkette dieser Apotheke anzeigen
               </button>
               <p className="text-xs text-slate-600 text-center">
-                Zeigt Fahrtroute und Backbone-Kette auf der Karte
+                Zeigt Last-Mile-Route + Hauptlauf-Kette (mVZ→VZ→HQ) auf der Karte
               </p>
             </div>
           </div>
@@ -89,6 +89,7 @@ export function InfoSidebar({
             {!!p.opening_hours   && <Row label="Öffnungszeiten" value={p.opening_hours} />}
             {!!p.delivery_window && <Row label="Lieferschicht"  value={p.delivery_window} />}
             {!!p.pharmacy_count  && <Row label="Apotheken"      value={`${p.pharmacy_count}`} />}
+            {p.warehouse_cost != null && <Row label="Lagerkosten" value={`CHF ${Number(p.warehouse_cost).toLocaleString('de-CH', { maximumFractionDigits: 0 })}`} />}
 
             {/* Capacity bar */}
             {cap != null && (
@@ -135,8 +136,20 @@ export function InfoSidebar({
                             ? 'bg-slate-700 border-slate-500 text-slate-200'
                             : 'border-slate-600 text-slate-400 hover:border-blue-500/60 hover:text-blue-300'
                           }`}>
-                  {isFocused ? 'Alle Routen zeigen' : 'Nur Routen dieses Hubs'}
+                  {isFocused ? 'Alle Routen zeigen' : 'Nur Routen + Zulieferung'}
                 </button>
+                {isFocused && (
+                  <div className="flex items-center justify-center gap-4 text-xs pt-0.5">
+                    <span className="flex items-center gap-1.5">
+                      <span className="w-3 h-0.5 rounded" style={{ backgroundColor: '#f97316' }} />
+                      <span className="text-slate-400">Eigene Routen</span>
+                    </span>
+                    <span className="flex items-center gap-1.5">
+                      <span className="w-3 h-0.5 rounded" style={{ backgroundColor: '#22c55e' }} />
+                      <span className="text-slate-400">Zulieferung</span>
+                    </span>
+                  </div>
+                )}
               </div>
             )}
           </div>

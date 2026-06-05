@@ -30,9 +30,11 @@ export default function App() {
   const [focusedPharmacyId, setFocusedPharmacyId] = useState<number | null>(null)
   const [focusedPharmacyHub,setFocusedPharmacyHub]= useState<string | null>(null) // hub of focused pharmacy
 
-  // Vehicle types and filter
+  // Vehicle types and filter (last-mile + Hauptlauf/backbone)
   const [vehicleTypes,      setVehicleTypes]      = useState<string[]>([])
   const [vehicleTypeFilter, setVehicleTypeFilter] = useState<Set<string>>(new Set())
+  const [backboneTypes,     setBackboneTypes]     = useState<string[]>([])
+  const [backboneTypeFilter,setBackboneTypeFilter]= useState<Set<string>>(new Set())
 
   // Hub hierarchy for supply-chain highlight
   const [hubMap,            setHubMap]            = useState<Map<string, HubInfo>>(new Map())
@@ -40,15 +42,21 @@ export default function App() {
     () => new Set(['pharmacies', 'hubs', 'assignments', 'backbone', 'routes']),
   )
 
-  // Load delivery vehicle types
+  // Load last-mile + Hauptlauf (backbone) vehicle types
   useEffect(() => {
     api.getVehicles()
       .then(vs => {
-        const types = vs.filter(v => v.can_last_mile && v.enabled)
+        const lm = vs.filter(v => v.can_last_mile && v.enabled)
           .sort((a, b) => a.sort_order - b.sort_order).map(v => v.name)
-        setVehicleTypes(types); setVehicleTypeFilter(new Set(types))
+        setVehicleTypes(lm); setVehicleTypeFilter(new Set(lm))
+        const bb = vs.filter(v => v.can_backbone && v.enabled)
+          .sort((a, b) => a.sort_order - b.sort_order).map(v => v.name)
+        setBackboneTypes(bb); setBackboneTypeFilter(new Set(bb))
       })
-      .catch(() => { setVehicleTypes(['Sprinter', 'Klein-LKW']); setVehicleTypeFilter(new Set(['Sprinter', 'Klein-LKW'])) })
+      .catch(() => {
+        setVehicleTypes(['Sprinter', 'Klein-LKW']); setVehicleTypeFilter(new Set(['Sprinter', 'Klein-LKW']))
+        setBackboneTypes(['Zug', 'LKW']); setBackboneTypeFilter(new Set(['Zug', 'LKW']))
+      })
   }, [])
 
   // Hub hierarchy for chain highlight
@@ -74,6 +82,16 @@ export default function App() {
       const n = new Set(prev)
       if (n.has(type)) { n.delete(type); if (n.size === 0) return new Set(vehicleTypes) }
       else { n.add(type); if (n.size === vehicleTypes.length) return new Set(vehicleTypes) }
+      return n
+    })
+  }
+
+  const toggleBackboneType = (type: string) => {
+    setBackboneTypeFilter(prev => {
+      if (prev.size === backboneTypes.length || prev.size === 0) return new Set([type])
+      const n = new Set(prev)
+      if (n.has(type)) { n.delete(type); if (n.size === 0) return new Set(backboneTypes) }
+      else { n.add(type); if (n.size === backboneTypes.length) return new Set(backboneTypes) }
       return n
     })
   }
@@ -107,26 +125,27 @@ export default function App() {
   const highlight: HighlightState | null = useMemo(() => {
     if (focusedVehicleId) {
       // Use stored hub name — never derive from vehicle_id string (split would mangle "VZ_1")
-      return { hubs: focusedVehicleHub ? chainOf(focusedVehicleHub) : [], pharmacyId: null, routeId: null, vehicleId: focusedVehicleId }
+      return { hubs: focusedVehicleHub ? chainOf(focusedVehicleHub) : [], pharmacyId: null, routeId: null, vehicleId: focusedVehicleId, primaryHub: null }
     }
     if (focusedPharmacyId != null) {
-      return { hubs: focusedPharmacyHub ? chainOf(focusedPharmacyHub) : [], pharmacyId: focusedPharmacyId, routeId: null, vehicleId: null }
+      return { hubs: focusedPharmacyHub ? chainOf(focusedPharmacyHub) : [], pharmacyId: focusedPharmacyId, routeId: null, vehicleId: null, primaryHub: null }
     }
     if (activeHubForHighlight) {
-      return { hubs: chainOf(activeHubForHighlight), pharmacyId: null, routeId: null, vehicleId: null }
+      // Pure hub focus → colour the hub's own (outbound) routes vs its inbound supply route
+      return { hubs: chainOf(activeHubForHighlight), pharmacyId: null, routeId: null, vehicleId: null, primaryHub: activeHubForHighlight }
     }
     if (selected?.type === 'pharmacy') {
       const p = selected.properties as any
-      return { hubs: p.hub_name ? chainOf(p.hub_name) : [], pharmacyId: (p.id as number) ?? null, routeId: null, vehicleId: null }
+      return { hubs: p.hub_name ? chainOf(p.hub_name) : [], pharmacyId: (p.id as number) ?? null, routeId: null, vehicleId: null, primaryHub: null }
     }
     if (selected?.type === 'route') {
       const p = selected.properties as any
       if (p.backbone_tier) {
         let to: string[] = []
         try { to = typeof p.to_hubs === 'string' ? JSON.parse(p.to_hubs) : (p.to_hubs ?? []) } catch { /* */ }
-        return { hubs: [p.from_hub, ...to].filter(Boolean), pharmacyId: null, routeId: null, vehicleId: null }
+        return { hubs: [p.from_hub, ...to].filter(Boolean), pharmacyId: null, routeId: null, vehicleId: null, primaryHub: null }
       }
-      return { hubs: p.hub_name ? [p.hub_name] : [], pharmacyId: null, routeId: p.id ?? null, vehicleId: null }
+      return { hubs: p.hub_name ? [p.hub_name] : [], pharmacyId: null, routeId: p.id ?? null, vehicleId: null, primaryHub: null }
     }
     return null
   }, [selected, focusedHub, focusedVehicleId, focusedPharmacyId, hubMap])
@@ -232,12 +251,14 @@ export default function App() {
               focusedVehicleId={focusedVehicleId}
               focusedPharmacyId={focusedPharmacyId}
               vehicleTypeFilter={vehicleTypeFilter}
+              backboneTypeFilter={backboneTypeFilter}
               highlight={highlight}
             />
 
             <div className="absolute bottom-8 left-4 z-10">
               <LayerToggle visibleLayers={visibleLayers} pipelineStatus={status} onToggle={toggleLayer}
-                vehicleTypes={vehicleTypes} vehicleTypeFilter={vehicleTypeFilter} onToggleVehicle={toggleVehicleType} />
+                vehicleTypes={vehicleTypes} vehicleTypeFilter={vehicleTypeFilter} onToggleVehicle={toggleVehicleType}
+                backboneTypes={backboneTypes} backboneTypeFilter={backboneTypeFilter} onToggleBackbone={toggleBackboneType} />
             </div>
 
             {/* Status banner */}

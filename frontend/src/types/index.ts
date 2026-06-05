@@ -20,6 +20,7 @@ export interface HighlightState {
   pharmacyId: number | null   // highlight a single assignment line
   routeId: number | null      // highlight a single vehicle route (numeric id)
   vehicleId: string | null    // highlight/filter a single vehicle_id string
+  primaryHub: string | null   // clicked hub → colour its outbound vs inbound supply distinctly
 }
 
 export interface RouteSummary {
@@ -145,6 +146,13 @@ export interface HubLoad {
   load:     number
   capacity: number
   pct:      number
+  warehouse_cost: number | null
+}
+
+export interface BackboneRoute extends IndividualRoute {
+  from_hub: string
+  to_hubs:  string[]
+  tier:     'hq_vz' | 'vz_mvz'
 }
 
 export interface FleetUtilization {
@@ -156,14 +164,18 @@ export interface FleetUtilization {
 export interface FullSummary {
   overview: {
     total_cost_chf: number
+    warehouse_cost_chf: number
+    total_cost_incl_warehouse_chf: number
     total_co2_kg: number
     total_km: number
     total_last_mile_routes: number
+    total_backbone_routes: number
     pharmacies_total: number
     pharmacies_assigned: number
     hubs_total: number
   }
   fleet_by_type: Record<string, FleetStats>
+  backbone_by_type: Record<string, FleetStats>
   fleet: {
     last_mile: FleetStats
     backbone: FleetStats
@@ -199,4 +211,5 @@ export interface FullSummary {
   }
   fleet_utilization: Record<string, FleetUtilization>
   individual_routes: IndividualRoute[]
+  individual_backbone_routes: BackboneRoute[]
 }

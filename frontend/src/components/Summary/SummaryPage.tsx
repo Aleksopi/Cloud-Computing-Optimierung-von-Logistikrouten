@@ -14,7 +14,8 @@ const groupBy = <T,>(arr: T[], fn: (x: T) => string): Record<string, T[]> =>
 
 const TABS = [
   { id: 'overview',    label: 'Übersicht'    },
-  { id: 'vehicles',    label: 'Fahrzeuge'    },
+  { id: 'vehicles',    label: 'Last Mile'    },
+  { id: 'backbone',    label: 'Hauptlauf'    },
   { id: 'hubs',        label: 'Hubs'         },
   { id: 'environment', label: 'CO2 & Umwelt' },
 ] as const
@@ -91,6 +92,7 @@ export function SummaryPage({ pipelineStatus }: SummaryPageProps) {
       <div className="flex-1 overflow-y-auto">
         {tab === 'overview'    && <OverviewTab    data={data} co2Saved={co2Saved} />}
         {tab === 'vehicles'    && <VehiclesTab    deliverySpecs={deliverySpecs} routesByType={routesByType} fleetUtil={fleet_utilization} />}
+        {tab === 'backbone'    && <BackboneTab    data={data} />}
         {tab === 'hubs'        && <HubsTab        data={data} />}
         {tab === 'environment' && <EnvironmentTab data={data} deliverySpecs={deliverySpecs} co2Saved={co2Saved} />}
       </div>
@@ -109,8 +111,8 @@ function OverviewTab({ data, co2Saved }: { data: FullSummary; co2Saved: number }
     <div className="max-w-5xl mx-auto px-6 py-6 space-y-6">
       {/* KPI row */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <KpiCard accent="blue"   label="Gesamtkosten"    main={`CHF ${fmt(overview.total_cost_chf, 0)}`}
-                 sub={`CHF ${fmt(metrics.cost_per_item_chf, 2)} / Einheit`} />
+        <KpiCard accent="blue"   label="Transportkosten"  main={`CHF ${fmt(overview.total_cost_chf, 0)}`}
+                 sub={`+ CHF ${fmt(overview.warehouse_cost_chf, 0)} Lager · CHF ${fmt(metrics.cost_per_item_chf, 2)}/Einh.`} />
         <KpiCard accent="green"  label="CO2-Emissionen"  main={`${fmt(overview.total_co2_kg)} kg`}
                  sub={co2Saved > 0 ? `−${fmt(co2Saved)} kg vs. Vollflotte LKW` : `${fmt(metrics.co2_per_km_kg * 1000, 1)} g/km`} />
         <KpiCard accent="amber"  label="Gesamtstrecke"   main={`${fmt(overview.total_km)} km`}
@@ -165,6 +167,8 @@ function OverviewTab({ data, co2Saved }: { data: FullSummary; co2Saved: number }
               ['Durchschn. Stops / Route',  `${fmt(metrics.avg_stops_per_route)}`],
               ['Durchschn. Distanz / Route', `${fmt(metrics.avg_km_per_route)} km`],
               ['Kosten pro Einheit',          `CHF ${fmt(metrics.cost_per_item_chf, 2)}`],
+              ['Lagerkosten (gesamt)',        `CHF ${fmt(overview.warehouse_cost_chf, 0)}`],
+              ['Gesamtkosten inkl. Lager',    `CHF ${fmt(overview.total_cost_incl_warehouse_chf, 0)}`],
               ['CO2 pro km (gesamt)',         `${fmt(metrics.co2_per_km_kg * 1000, 1)} g/km`],
               ['Gesamte Fahrstunden',         `${fmt(metrics.total_driver_hours)} h`],
               ['Nicht zugewiesene Apotheken', `${metrics.unrouted_pharmacies}`],
@@ -262,6 +266,71 @@ function VehiclesTab({ deliverySpecs, routesByType, fleetUtil }: {
 }
 
 /* ══════════════════════════════════════════════════════════════════════════
+   TAB: Hauptlauf (backbone — Hub ↔ Hub)
+══════════════════════════════════════════════════════════════════════════ */
+function BackboneTab({ data }: { data: FullSummary }) {
+  const { backbone_by_type, fleet, individual_backbone_routes } = data
+  const routesByType = groupBy(individual_backbone_routes, r => r.vehicle_type)
+  const types = Object.keys(routesByType).sort()
+  const bb = fleet.backbone
+
+  if (!individual_backbone_routes.length) return (
+    <div className="max-w-5xl mx-auto px-6 py-12 text-center text-slate-500 text-sm">
+      Keine Hauptlauf-Routen vorhanden — bitte Schritt 4 ausführen.
+    </div>
+  )
+
+  return (
+    <div className="max-w-6xl mx-auto px-6 py-6 space-y-6">
+      {/* KPIs */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <KpiCard accent="violet" label="Hauptlauf-Routen" main={`${bb.count}`} sub="HQ→VZ + VZ→mVZ" />
+        <KpiCard accent="amber"  label="Strecke"          main={`${fmt(bb.total_km)} km`} sub={`${fmt(bb.total_items, 0)} Einheiten transportiert`} />
+        <KpiCard accent="blue"   label="Kosten"           main={`CHF ${fmt(bb.total_cost_chf, 0)}`} sub={`${fmt(bb.total_hours)} h Fahrzeit`} />
+        <KpiCard accent="green"  label="CO2"              main={`${fmt(bb.total_co2_kg)} kg`} sub="Hauptlauf gesamt" />
+      </div>
+
+      {/* Fleet by backbone vehicle type */}
+      <Card title="Hauptlauf-Flotte nach Fahrzeugtyp" sub="Hub-zu-Hub Transport (Sprinter / LKW / Zug …)">
+        <div className="overflow-x-auto">
+          <table className="w-full text-xs">
+            <thead>
+              <tr className="text-slate-500 border-b border-slate-800">
+                {['Fahrzeug','Routen','Strecke','Waren','Zeit','Kosten','CO2'].map(h => (
+                  <th key={h} className="pb-2 pr-4 text-left font-medium">{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-800/40">
+              {types.map((t, i) => {
+                const s = backbone_by_type[t]
+                if (!s) return null
+                return (
+                  <tr key={t} className="text-slate-300 hover:bg-slate-800/20">
+                    <td className="py-2 pr-4 font-semibold" style={{ color: VCOL(t, i) }}>{t}</td>
+                    <td className="py-2 pr-4">{s.count}</td>
+                    <td className="py-2 pr-4">{fmt(s.total_km)} km</td>
+                    <td className="py-2 pr-4">{fmt(s.total_items, 0)}</td>
+                    <td className="py-2 pr-4">{fmt(s.total_hours)} h</td>
+                    <td className="py-2 pr-4 text-slate-200 font-medium">CHF {fmt(s.total_cost_chf, 0)}</td>
+                    <td className="py-2 pr-4">{fmt(s.total_co2_kg)} kg</td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
+      </Card>
+
+      {/* Per-type route detail */}
+      {types.map((t, i) => (
+        <VehicleTypeGroup key={t} type={t} routes={routesByType[t]} color={VCOL(t, i)} />
+      ))}
+    </div>
+  )
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
    TAB: Hubs
 ══════════════════════════════════════════════════════════════════════════ */
 function HubsTab({ data }: { data: FullSummary }) {
@@ -269,12 +338,12 @@ function HubsTab({ data }: { data: FullSummary }) {
   return (
     <div className="max-w-5xl mx-auto px-6 py-6 space-y-6">
       {/* Hub loads */}
-      <Card title="Lagerauslastung" sub="alle Hubs">
+      <Card title="Lagerauslastung & -kosten" sub="alle Hubs · Lagerkosten standortabhängig (dichter = teurer)">
         <div className="overflow-x-auto">
           <table className="w-full text-xs">
             <thead>
               <tr className="text-slate-500 border-b border-slate-800">
-                {['Hub','Typ','Last / Kapazität','Auslastung','Balken'].map(h => (
+                {['Hub','Typ','Last / Kapazität','Auslastung','Lagerkosten','Balken'].map(h => (
                   <th key={h} className="pb-2 pr-4 text-left font-medium">{h}</th>
                 ))}
               </tr>
@@ -290,6 +359,9 @@ function HubsTab({ data }: { data: FullSummary }) {
                       {h.pct}%
                     </span>
                   </td>
+                  <td className="py-2 pr-4 text-slate-400">
+                    {h.warehouse_cost != null ? `CHF ${fmt(h.warehouse_cost, 0)}` : '—'}
+                  </td>
                   <td className="py-2 w-32">
                     <div className="h-2 bg-slate-800 rounded-full overflow-hidden">
                       <div className={`h-full rounded-full ${h.pct >= 100 ? 'bg-red-500' : h.pct >= 80 ? 'bg-amber-500' : 'bg-emerald-500'}`}
@@ -298,6 +370,13 @@ function HubsTab({ data }: { data: FullSummary }) {
                   </td>
                 </tr>
               ))}
+              <tr className="font-semibold text-slate-300 border-t border-slate-700/60 bg-slate-800/20">
+                <td className="py-2 pr-4 text-slate-500" colSpan={4}>Summe Lagerkosten</td>
+                <td className="py-2 pr-4">
+                  CHF {fmt(metrics.hub_loads.reduce((s, h) => s + (h.warehouse_cost || 0), 0), 0)}
+                </td>
+                <td />
+              </tr>
             </tbody>
           </table>
         </div>

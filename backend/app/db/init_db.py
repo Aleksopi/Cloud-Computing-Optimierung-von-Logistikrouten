@@ -47,6 +47,13 @@ DEFAULT_SYSTEM_CONFIG = [
     ("vz_capacity",         "600",    "VZ-Lagerkapazität (Einheiten)",     "Max. Warenmenge je Verteilzentrum"),
     ("mvz_capacity",        "125",    "mVZ-Lagerkapazität (Einheiten)",    "Max. Warenmenge je Mini-Verteilzentrum"),
     ("default_demand_est",  "3",      "Bedarfsschätzung pro Apotheke",     "Proxy für Kapazitätsprüfung vor Step 2"),
+    # Standortabhängige Lagerkosten (Step 2) — dichter besiedelt = teurer
+    ("warehouse_cost_hq",   "4000",   "Lagerkosten HQ (CHF)",              "Basis-Betriebskosten des Hauptquartiers"),
+    ("warehouse_cost_vz",   "1500",   "Lagerkosten VZ (CHF)",              "Basis-Betriebskosten je Verteilzentrum"),
+    ("warehouse_cost_mvz",  "500",    "Lagerkosten mVZ (CHF)",             "Basis-Betriebskosten je Mini-Verteilzentrum"),
+    ("warehouse_density_cost", "4.0", "Lagerkosten-Dichtezuschlag (CHF/Einh.)", "Aufschlag je lokaler Bedarfseinheit im Umkreis (Landpreis-Proxy)"),
+    ("warehouse_density_radius_km", "8.0", "Lager-Dichteradius (km)",      "Umkreis für die lokale Bedarfsdichte"),
+    ("warehouse_density_weight", "0.35", "Lagerkosten-Gewicht im Placement", "0 = Standort egal; ~0.5 = Hubs meiden teure (dichte) Lagen stark"),
     # Öffnungszeiten (Stunden, z.B. 8.5 = 08:30)
     ("shift_start",         "8.0",    "Schichtbeginn (Stunden)",           "Startzeit der Lieferschicht"),
     ("pharmacy_open_hour",  "8.0",    "Apotheke Öffnung (Stunden)",        "Standard-Öffnungszeit für alle Apotheken"),
@@ -91,6 +98,9 @@ def _migrate_columns():
         "ALTER TABLE hubs ADD COLUMN IF NOT EXISTS capacity INTEGER",
         "ALTER TABLE hubs ADD COLUMN IF NOT EXISTS open_hour DOUBLE PRECISION",
         "ALTER TABLE hubs ADD COLUMN IF NOT EXISTS close_hour DOUBLE PRECISION",
+        "ALTER TABLE hubs ADD COLUMN IF NOT EXISTS shift_start DOUBLE PRECISION",
+        "ALTER TABLE hubs ADD COLUMN IF NOT EXISTS shift_hours DOUBLE PRECISION",
+        "ALTER TABLE hubs ADD COLUMN IF NOT EXISTS warehouse_cost DOUBLE PRECISION",
         "ALTER TABLE pharmacies ADD COLUMN IF NOT EXISTS open_hour DOUBLE PRECISION",
         "ALTER TABLE pharmacies ADD COLUMN IF NOT EXISTS close_hour DOUBLE PRECISION",
         "ALTER TABLE vehicle_routes ADD COLUMN IF NOT EXISTS supply_tier VARCHAR",

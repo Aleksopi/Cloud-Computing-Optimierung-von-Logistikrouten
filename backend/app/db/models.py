@@ -31,6 +31,11 @@ class Hub(Base):
     capacity   = Column(Integer, nullable=True) # warehouse capacity in goods units
     open_hour  = Column(Float,   nullable=True) # e.g. 7.0 = 07:00
     close_hour = Column(Float,   nullable=True) # e.g. 20.0 = 20:00
+    # Per-hub delivery shift (each city its own) — seeded from global config
+    shift_start = Column(Float, nullable=True)  # e.g. 8.0 = 08:00 dispatch
+    shift_hours = Column(Float, nullable=True)  # max driving hours per shift
+    # Location-dependent warehouse operating cost (CHF), set at placement time
+    warehouse_cost = Column(Float, nullable=True)
 
 
 class Assignment(Base):

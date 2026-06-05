@@ -1,4 +1,3 @@
-import datetime
 import math
 from collections import defaultdict
 
@@ -19,6 +18,13 @@ def _fmt_hour(h: float | None) -> str:
     hrs  = int(h)
     mins = round((h - hrs) * 60)
     return f"{hrs:02d}:{mins:02d}"
+
+
+def _window(start_h: float | None, hours: float | None) -> str:
+    """Per-hub delivery window as 'HH:MM – HH:MM Uhr'."""
+    if start_h is None or hours is None:
+        return "—"
+    return f"{_fmt_hour(start_h)} – {_fmt_hour(min(start_h + hours, 24.0))} Uhr"
 
 
 def _optimization_block(sys_raw: dict[str, str]) -> dict:
@@ -119,10 +125,12 @@ def get_hubs():
                 load[p.hub_name] += int(effective)
                 pharm_count[p.hub_name] += 1
 
-        shift_h = float(sys_raw.get("shift_hours", "8.0"))
-        start = datetime.time(8, 0)
-        end   = datetime.time(min(8 + int(shift_h), 23), 0)
-        delivery_window = f"{start.strftime('%H:%M')} – {end.strftime('%H:%M')} Uhr"
+        g_shift_start = float(sys_raw.get("shift_start", "8.0"))
+        g_shift_hours = float(sys_raw.get("shift_hours", "8.0"))
+
+        def _hub_shift(h):
+            return (h.shift_start if h.shift_start is not None else g_shift_start,
+                    h.shift_hours if h.shift_hours is not None else g_shift_hours)
 
         return {
             "type": "FeatureCollection",
@@ -142,7 +150,11 @@ def get_hubs():
                         "vehicle_counts":   route_stats[h.name]["vehicle_counts"],
                         "total_items":      route_stats[h.name]["total_items"],
                         "total_km":         round(route_stats[h.name]["total_km"], 1),
-                        "delivery_window":  delivery_window,
+                        # Per-hub delivery shift (each city its own)
+                        "delivery_window":  _window(*_hub_shift(h)),
+                        "shift_start":      _hub_shift(h)[0],
+                        "shift_hours":      _hub_shift(h)[1],
+                        "warehouse_cost":   round(h.warehouse_cost, 2) if h.warehouse_cost is not None else None,
                         "open_hour":        h.open_hour,
                         "close_hour":       h.close_hour,
                         "opening_hours":    f"{_fmt_hour(h.open_hour)} – {_fmt_hour(h.close_hour)}"
@@ -397,12 +409,53 @@ def get_full_summary():
         total_lm_stops = sum(len(r.stops or []) for r in last_mile)
         total_all_co2  = sum(r.co2_kg or 0 for r in all_routes)
 
+        # ── Hauptlauf (backbone) fleet stats per vehicle type ─────────────────
+        backbone_type_stats: dict[str, dict] = {}
+        for r in backbone:
+            vt = r.vehicle_type or "—"
+            s = backbone_type_stats.setdefault(vt, {
+                "count": 0, "total_km": 0.0, "total_hours": 0.0,
+                "total_cost_chf": 0.0, "total_co2_kg": 0.0, "total_items": 0})
+            s["count"]          += 1
+            s["total_km"]       += r.total_km       or 0
+            s["total_hours"]    += r.total_hours     or 0
+            s["total_cost_chf"] += r.total_cost_chf or 0
+            s["total_co2_kg"]   += r.co2_kg         or 0
+            s["total_items"]    += r.total_items     or 0
+
+        hq_name = hq.name if hq else ""
+        individual_backbone = sorted([
+            {
+                "vehicle_id":    r.vehicle_id,
+                "vehicle_type":  r.vehicle_type,
+                "hub_name":      r.hub_name,
+                "from_hub":      r.hub_name,
+                "to_hubs":       [str(x) for x in (r.stops or [])],
+                "tier":          "hq_vz" if r.hub_name == hq_name else "vz_mvz",
+                "stop_count":    len(r.stops or []),
+                "total_km":      round(r.total_km or 0, 2),
+                "total_hours":   round(r.total_hours or 0, 2),
+                "total_items":   r.total_items or 0,
+                "total_cost_chf": round(r.total_cost_chf or 0, 2),
+                "co2_kg":        round(r.co2_kg or 0, 3),
+                "restock_count": r.restock_count or 0,
+            }
+            for r in backbone
+        ], key=lambda x: (x["vehicle_type"], x["hub_name"], x["vehicle_id"]))
+
+        # ── Warehouse (Lager) costs ───────────────────────────────────────────
+        warehouse_total = round(sum(h.warehouse_cost or 0 for h in all_hubs), 2)
+        route_cost_total = round(sum(r.total_cost_chf or 0 for r in all_routes), 2)
+
         return {
             "overview": {
-                "total_cost_chf":          round(sum(r.total_cost_chf or 0 for r in all_routes), 2),
+                "total_cost_chf":          route_cost_total,
+                "warehouse_cost_chf":      warehouse_total,
+                "total_cost_incl_warehouse_chf": round(route_cost_total + warehouse_total, 2),
                 "total_co2_kg":            round(total_all_co2, 2),
                 "total_km":                round(sum(r.total_km or 0 for r in all_routes), 2),
                 "total_last_mile_routes":  len(last_mile),
+                "total_backbone_routes":   len(backbone),
                 "pharmacies_total":        len(pharmacies),
                 "pharmacies_assigned":     sum(1 for p in pharmacies if p.hub_name),
                 "hubs_total":              len(all_hubs),
@@ -412,6 +465,11 @@ def get_full_summary():
                                          "total_cost_chf": round(s["total_cost_chf"], 2),
                                          "total_co2_kg": round(s["total_co2_kg"], 3)}
                                 for vt, s in type_stats.items()},
+            "backbone_by_type": {vt: {**s, "total_km": round(s["total_km"], 2),
+                                          "total_hours": round(s["total_hours"], 2),
+                                          "total_cost_chf": round(s["total_cost_chf"], 2),
+                                          "total_co2_kg": round(s["total_co2_kg"], 3)}
+                                 for vt, s in backbone_type_stats.items()},
             "fleet": {
                 "last_mile": _fleet_stats(last_mile),
                 "backbone":  _fleet_stats(backbone),
@@ -451,11 +509,13 @@ def get_full_summary():
                         "capacity": h.capacity or 0,
                         "pct":      round(100 * load_per_hub.get(h.name, 0) / h.capacity, 1)
                                     if h.capacity else 0,
+                        "warehouse_cost": round(h.warehouse_cost, 2) if h.warehouse_cost is not None else None,
                     }
                     for h in sorted(all_hubs, key=lambda x: (x.hub_type, x.name))
                 ],
             },
             "fleet_utilization": fleet_utilization,
+            "individual_backbone_routes": individual_backbone,
             "individual_routes": sorted([
                 {
                     "vehicle_id":    r.vehicle_id,

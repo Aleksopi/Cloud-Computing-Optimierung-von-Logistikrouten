@@ -185,33 +185,35 @@ def run_routes(db) -> None:
 
     sys_raw = {c.key: float(c.value) for c in db.query(SystemConfig).all()}
 
-    # ── Live-traffic: derive the effective traffic factor ─────────────────────
-    # ON  → time-of-day congestion averaged over the delivery shift.
-    # OFF → the static configured `traffic_factor` (default 1.0 = free flow).
-    live_traffic = sys_raw.get("live_traffic_enabled", 0.0) >= 0.5
-    shift_start  = sys_raw.get("shift_start", 8.0)
-    shift_hours  = sys_raw.get("shift_hours", 8.0)
-    traffic_factor = effective_factor(
-        enabled=live_traffic,
-        static_factor=sys_raw.get("traffic_factor", 1.0),
-        shift_start=shift_start,
-        shift_hours=shift_hours,
-        peak_intensity=sys_raw.get("traffic_peak_intensity", 1.0),
-    )
+    # ── Live-traffic + per-hub shift ──────────────────────────────────────────
+    # Each city/hub has its own delivery shift → its own averaged congestion when
+    # live traffic is ON. OFF → the static configured `traffic_factor`.
+    live_traffic   = sys_raw.get("live_traffic_enabled", 0.0) >= 0.5
+    peak_intensity = sys_raw.get("traffic_peak_intensity", 1.0)
+    static_tf      = sys_raw.get("traffic_factor", 1.0)
+    g_shift_start  = sys_raw.get("shift_start", 8.0)
+    g_shift_hours  = sys_raw.get("shift_hours", 8.0)
 
-    opt = {
-        "shift_hours":    shift_hours,
-        "shift_start":    shift_start,
-        "weight_cost":    sys_raw.get("opt_weight_cost", 0.40),
-        "weight_time":    sys_raw.get("opt_weight_time", 0.35),
-        "weight_env":     sys_raw.get("opt_weight_env",  0.25),
-        "traffic_factor": traffic_factor,
-        "co2_shadow":     sys_raw.get("co2_shadow_chf",  0.12),
+    base_opt = {
+        "weight_cost": sys_raw.get("opt_weight_cost", 0.40),
+        "weight_time": sys_raw.get("opt_weight_time", 0.35),
+        "weight_env":  sys_raw.get("opt_weight_env",  0.25),
+        "co2_shadow":  sys_raw.get("co2_shadow_chf",  0.12),
     }
+
+    def _hub_opt(h: dict) -> dict:
+        """Per-hub optimisation context — each city its own shift + traffic factor."""
+        s_start = h.get("shift_start") or g_shift_start
+        s_hours = h.get("shift_hours") or g_shift_hours
+        tf = effective_factor(enabled=live_traffic, static_factor=static_tf,
+                              shift_start=s_start, shift_hours=s_hours,
+                              peak_intensity=peak_intensity)
+        return {**base_opt, "shift_start": s_start, "shift_hours": s_hours, "traffic_factor": tf}
+
     logger.info(
         f"[Step 4] Last-mile fleet: {[v['name'] for v in last_mile_veh]} | "
         f"Backbone fleet: {[v['name'] for v in backbone_veh]} | "
-        f"Live-Verkehr: {'AN' if live_traffic else 'AUS'} (Faktor ×{traffic_factor})"
+        f"Live-Verkehr: {'AN' if live_traffic else 'AUS'} (per-Hub Schicht & Verkehr)"
     )
 
     # ── Prepare data — extract ALL ORM fields into plain dicts BEFORE threads ──
@@ -219,13 +221,15 @@ def run_routes(db) -> None:
     # Hub plain dicts — safe for cross-thread access (no lazy-loading possible)
     hub_dicts: dict[str, dict] = {
         h.name: {
-            "name":       h.name,
-            "hub_type":   h.hub_type,
-            "lat":        float(h.lat),
-            "lon":        float(h.lon),
-            "parent_hub": h.parent_hub,
-            "open_hour":  float(h.open_hour  or 0.0),
-            "close_hour": float(h.close_hour or 24.0),
+            "name":        h.name,
+            "hub_type":    h.hub_type,
+            "lat":         float(h.lat),
+            "lon":         float(h.lon),
+            "parent_hub":  h.parent_hub,
+            "open_hour":   float(h.open_hour  or 0.0),
+            "close_hour":  float(h.close_hour or 24.0),
+            "shift_start": float(h.shift_start) if h.shift_start is not None else None,
+            "shift_hours": float(h.shift_hours) if h.shift_hours is not None else None,
         }
         for h in db.query(Hub).all()
     }
@@ -262,7 +266,7 @@ def run_routes(db) -> None:
     def _process(hub_name: str):
         h = delivery_hub_dicts[hub_name]   # plain dict — fully thread-safe
         return _solve_vrp(hub_name, h["lat"], h["lon"],
-                          hub_stops.get(hub_name, []), last_mile_veh, opt)
+                          hub_stops.get(hub_name, []), last_mile_veh, _hub_opt(h))
 
     with ThreadPoolExecutor(max_workers=8) as pool:
         futures = [pool.submit(_process, n) for n in delivery_hub_dicts]
@@ -293,7 +297,7 @@ def run_routes(db) -> None:
             for vz in vz_list
         ]
         backbone_routes.extend(
-            _solve_vrp(hq_d["name"], hq_d["lat"], hq_d["lon"], hq_stops, backbone_veh, opt)
+            _solve_vrp(hq_d["name"], hq_d["lat"], hq_d["lon"], hq_stops, backbone_veh, _hub_opt(hq_d))
         )
 
         # Each VZ → its child mVZs (multi-stop tour)
@@ -307,7 +311,7 @@ def run_routes(db) -> None:
                 for m in children
             ]
             backbone_routes.extend(
-                _solve_vrp(vz["name"], vz["lat"], vz["lon"], mvz_stops, backbone_veh, opt)
+                _solve_vrp(vz["name"], vz["lat"], vz["lon"], mvz_stops, backbone_veh, _hub_opt(vz))
             )
 
     db.bulk_save_objects([_route_obj(r, "backbone") for r in backbone_routes])
