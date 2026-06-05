@@ -250,10 +250,13 @@ export function MapView({
           (mapRef.current.getSource(id) as maplibregl.GeoJSONSource).setData(EMPTY)
       }
     }
-    const purl = st(3) === 'done' ? '/api/results/pharmacies?demand=1' : '/api/results/pharmacies'
-    fetchUrl('pharmacies', purl, `ph:${rk(1)}:${rk(3)}`)
-    if (st(1) === 'done') fetchUrl('hubs', '/api/results/hubs', rk(1))
-    if (st(2) === 'done') fetchUrl('assignments', '/api/results/assignments', rk(2))
+    // Step 1 = demand → pharmacy circles scale after step 1
+    // Step 2 = hub placement → hubs appear after step 2
+    // Step 3 = influence zones → assignments appear after step 3
+    const purl = st(1) === 'done' ? '/api/results/pharmacies?demand=1' : '/api/results/pharmacies'
+    fetchUrl('pharmacies', purl, `ph:${rk(1)}`)
+    if (st(2) === 'done') fetchUrl('hubs', '/api/results/hubs', rk(2))
+    if (st(3) === 'done') fetchUrl('assignments', '/api/results/assignments', rk(3))
     if (st(4) === 'done') { fetchUrl('routes', '/api/results/routes', rk(4)); fetchUrl('backbone', '/api/results/backbone', rk(4)) }
   }, [fetchUrl])
   const syncDataRef = useRef(syncData); syncDataRef.current = syncData

@@ -21,8 +21,8 @@ interface LayerDef {
 
 const LAYERS: LayerDef[] = [
   { key: 'pharmacies', label: 'Apotheken',      colors: [COLORS.pharmacy],                              circle: true,  always: true },
-  { key: 'hubs',       label: 'Hubs',           colors: [COLORS.hqFill, COLORS.vzFill, COLORS.mvzFill], subLabels: ['HQ','VZ','mVZ'], circle: true, step: 1 },
-  { key: 'assignments',label: 'Einzugsgebiete', colors: [COLORS.assignmentVz, COLORS.assignmentMvz],   subLabels: ['VZ','mVZ'],      line: true,   step: 2 },
+  { key: 'hubs',       label: 'Hubs',           colors: [COLORS.hqFill, COLORS.vzFill, COLORS.mvzFill], subLabels: ['HQ','VZ','mVZ'], circle: true, step: 2 },
+  { key: 'assignments',label: 'Einzugsgebiete', colors: [COLORS.assignmentVz, COLORS.assignmentMvz],   subLabels: ['VZ','mVZ'],      line: true,   step: 3 },
   { key: 'backbone',   label: 'Lieferkette',    colors: [COLORS.backboneHqVz, COLORS.backboneVzMvz],   subLabels: ['HQ→VZ','VZ→mVZ'], line: true, step: 4 },
   { key: 'routes',     label: 'Fahrzeugrouten', colors: [COLORS.sprinterRoute, COLORS.kleinLkwRoute],  subLabels: ['Sprinter','Klein-LKW'], line: true, step: 4 },
 ]

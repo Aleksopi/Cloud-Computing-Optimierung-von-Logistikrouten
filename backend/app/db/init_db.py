@@ -39,9 +39,11 @@ DEFAULT_SYSTEM_CONFIG = [
     ("co2_shadow_chf",      "0.12",   "CO₂-Schattenpreis (CHF/kg)",        "Monetarisierung der Umweltkosten"),
     ("max_catchment_km",    "10.0",   "Max. Einzugsgebiet-Radius (km)",    "Für Warenbedarf-Berechnung"),
     ("vz_hard_radius_km",   "45.0",   "VZ-Zuweisungsradius (km)",          "Apotheke → direkt zu VZ wenn ≤ Radius"),
-    ("vz_capacity",         "320",    "VZ-Lagerkapazität (Einheiten)",     "Max. Warenmenge je Verteilzentrum"),
-    ("mvz_capacity",        "90",     "mVZ-Lagerkapazität (Einheiten)",    "Max. Warenmenge je Mini-Verteilzentrum"),
-    ("default_demand_est",  "3",      "Bedarfsschätzung pro Apotheke",     "Proxy für Kapazitätsprüfung vor Step 3"),
+    ("n_vz",                "4",      "Anzahl Verteilzentren (VZ)",        "Wird bei Hub Placement (Step 2) verwendet"),
+    ("n_mvz",               "20",     "Anzahl Mini-Verteilzentren (mVZ)",  "Wird bei Hub Placement (Step 2) verwendet"),
+    ("vz_capacity",         "600",    "VZ-Lagerkapazität (Einheiten)",     "Max. Warenmenge je Verteilzentrum"),
+    ("mvz_capacity",        "125",    "mVZ-Lagerkapazität (Einheiten)",    "Max. Warenmenge je Mini-Verteilzentrum"),
+    ("default_demand_est",  "3",      "Bedarfsschätzung pro Apotheke",     "Proxy für Kapazitätsprüfung vor Step 2"),
     # Öffnungszeiten (Stunden, z.B. 8.5 = 08:30)
     ("shift_start",         "8.0",    "Schichtbeginn (Stunden)",           "Startzeit der Lieferschicht"),
     ("pharmacy_open_hour",  "8.0",    "Apotheke Öffnung (Stunden)",        "Standard-Öffnungszeit für alle Apotheken"),
@@ -73,6 +75,7 @@ def init_db():
 
         _ensure_vehicles(db)
         _ensure_system_config(db)
+        _update_stale_defaults(db)
         _apply_default_pharmacy_hours(db)
     finally:
         db.close()
@@ -99,6 +102,24 @@ def _migrate_columns():
         logger.info("[init_db] Column migrations applied")
     except Exception as e:
         logger.warning(f"[init_db] Migration warning (non-fatal): {e}")
+
+
+def _update_stale_defaults(db):
+    """Silently upgrade config values that still hold deprecated defaults."""
+    upgrades = [
+        # (key, old_value, new_value)
+        ("vz_capacity",  "320",  "600"),
+        ("mvz_capacity", "90",   "125"),
+    ]
+    changed = 0
+    for key, old_val, new_val in upgrades:
+        row = db.query(SystemConfig).filter(SystemConfig.key == key).first()
+        if row and row.value == old_val:
+            row.value = new_val
+            changed += 1
+    if changed:
+        db.commit()
+        logger.info(f"[init_db] Upgraded {changed} stale config default(s)")
 
 
 def _apply_default_pharmacy_hours(db):

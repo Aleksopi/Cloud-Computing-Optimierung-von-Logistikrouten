@@ -159,8 +159,10 @@ export function SettingsPage() {
               <div className="space-y-4">
                 <h4 className="text-xs font-semibold text-slate-400 uppercase tracking-wide">Logistikparameter</h4>
                 {[
+                  'n_vz', 'n_mvz',
+                  'vz_capacity', 'mvz_capacity',
                   'population_per_item', 'max_catchment_km', 'vz_hard_radius_km',
-                  'vz_capacity', 'mvz_capacity', 'default_demand_est',
+                  'default_demand_est',
                   'shift_start', 'shift_hours', 'traffic_factor', 'co2_shadow_chf',
                 ].map(key => (
                   <SysField key={key} conf={sysConf.find(c => c.key === key)}

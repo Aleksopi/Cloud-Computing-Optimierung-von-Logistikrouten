@@ -88,9 +88,12 @@ def _greedy_pmedian(
 def run_hub_placement(pharmacies: list[Pharmacy], db) -> None:
     # Configurable hub capacities (goods units) + demand estimate proxy
     sys_raw = {c.key: c.value for c in db.query(SystemConfig).all()}
-    vz_capacity   = int(float(sys_raw.get("vz_capacity",  "320")))
-    mvz_capacity  = int(float(sys_raw.get("mvz_capacity", "90")))
+    n_vz          = int(float(sys_raw.get("n_vz",          str(N_VZ))))
+    n_mvz         = int(float(sys_raw.get("n_mvz",         str(N_MINI_VZ))))
+    vz_capacity   = int(float(sys_raw.get("vz_capacity",   "600")))
+    mvz_capacity  = int(float(sys_raw.get("mvz_capacity",  "125")))
     demand_est    = float(sys_raw.get("default_demand_est", "3"))
+    logger.info(f"[Step 2] Config: {n_vz} VZ (cap {vz_capacity}) + {n_mvz} mVZ (cap {mvz_capacity})")
     # Hub opening hours from config
     hub_hours = {
         "HQ":  (float(sys_raw.get("hub_hq_open",  "6.0")),  float(sys_raw.get("hub_hq_close",  "22.0"))),
@@ -107,29 +110,41 @@ def run_hub_placement(pharmacies: list[Pharmacy], db) -> None:
     hq_idx = 0
     pharm_idxs = list(range(1, len(all_coords)))
 
-    logger.info(f"[Step 1] Building {len(all_coords)}×{len(all_coords)} distance matrix…")
+    logger.info(f"[Step 2] Building {len(all_coords)}×{len(all_coords)} distance matrix…")
     D = _dist_matrix(all_coords)
 
-    logger.info(f"[Step 1] Placing {N_VZ} VZs…")
+    # ── Demand-weighted p-median ───────────────────────────────────────────────
+    # Demand is known from Step 1 — use actual values as weights so hubs are
+    # pulled towards high-demand pharmacies, not just by count / equal weight.
+    demand_weights = np.array([float(p.demand or demand_est) for p in pharmacies])
+    # Normalise to avoid very large magnitudes (optional, keeps gain comparable)
+    demand_norm = demand_weights / max(demand_weights.mean(), 1.0)
+
+    logger.info(
+        f"[Step 2] Demand weights: min={demand_weights.min():.1f} "
+        f"max={demand_weights.max():.1f} mean={demand_weights.mean():.1f}"
+    )
+
+    logger.info(f"[Step 2] Placing {n_vz} VZs (demand-weighted)…")
     vz_indices = _greedy_pmedian(
         candidate_idxs=pharm_idxs,
         pharmacy_idxs=pharm_idxs,
         D=D,
-        weights=np.full(len(pharm_idxs), VZ_INFLUENCE_WEIGHT),
-        n_hubs=N_VZ,
+        weights=demand_norm * VZ_INFLUENCE_WEIGHT,
+        n_hubs=n_vz,
         already_placed=[hq_idx],
         min_spacing_km=VZ_MIN_SPACING_KM,
         min_hq_dist_km=VZ_MIN_DIST_FROM_HQ_KM,
         hq_idx=hq_idx,
     )
 
-    logger.info(f"[Step 1] Placing {N_MINI_VZ} Mini-VZs…")
+    logger.info(f"[Step 2] Placing {n_mvz} Mini-VZs (demand-weighted)…")
     mini_vz_indices = _greedy_pmedian(
         candidate_idxs=pharm_idxs,
         pharmacy_idxs=pharm_idxs,
         D=D,
-        weights=np.ones(len(pharm_idxs)),
-        n_hubs=N_MINI_VZ,
+        weights=demand_norm,
+        n_hubs=n_mvz,
         already_placed=[hq_idx] + vz_indices,
         min_spacing_km=MINI_VZ_MIN_SPACING_KM,
         min_hq_dist_km=HUB_MIN_DIST_FROM_HQ_KM,
@@ -144,7 +159,7 @@ def run_hub_placement(pharmacies: list[Pharmacy], db) -> None:
     mvz_o, mvz_c = hub_hours["mVZ"]
 
     db.add(Hub(name=settings.hq_name, hub_type="HQ", lat=hq[0], lon=hq[1],
-               capacity=vz_capacity * max(1, len(vz_indices)),
+               capacity=vz_capacity * max(1, len(vz_indices)),   # HQ holds stock for all VZs
                open_hour=hq_o, close_hour=hq_c))
 
     vz_list: list[tuple[str, float, float]] = []
@@ -172,7 +187,7 @@ def run_hub_placement(pharmacies: list[Pharmacy], db) -> None:
         nearest_vz = min(vz_list, key=lambda t: _hav(hub_obj.lat, hub_obj.lon, t[1], t[2]))
         hub_obj.parent_hub = nearest_vz[0]
     db.commit()
-    logger.info(f"[Step 1] mVZ parent assignments written")
+    logger.info(f"[Step 2] mVZ parent assignments written")
 
     # ── Capacity-aware assignment (haversine + warehouse limits) ─────────────
     # Each hub holds at most `capacity` goods units. Pharmacies are assigned to
@@ -224,6 +239,6 @@ def run_hub_placement(pharmacies: list[Pharmacy], db) -> None:
 
     db.commit()
     logger.info(
-        f"[Step 1] Done — {assigned_vz} → VZ, {assigned_mini} → mVZ, "
+        f"[Step 2] Done — {assigned_vz} → VZ, {assigned_mini} → mVZ, "
         f"{overflow} over-capacity overflow assignments"
     )
