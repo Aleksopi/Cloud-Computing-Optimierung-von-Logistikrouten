@@ -13,7 +13,10 @@ export function InfoSidebar({ feature, onClose }: InfoSidebarProps) {
       <div className="flex items-start justify-between gap-2 mb-3">
         <div>
           <div className="text-xs text-gray-500 uppercase tracking-wide font-semibold">
-            {feature.type === 'pharmacy' ? '💊 Apotheke' : feature.type === 'hub' ? '🏭 Hub' : '🚐 Fahrzeugroute'}
+            {feature.type === 'pharmacy' ? '💊 Apotheke'
+              : feature.type === 'hub' ? '🏭 Hub'
+              : p.vehicle_type === 'Backbone' ? '🔗 Lieferkette'
+              : '🚐 Fahrzeugroute'}
           </div>
           <div className="text-white font-semibold mt-0.5 break-words">
             {feature.type === 'pharmacy'
@@ -45,10 +48,25 @@ export function InfoSidebar({ feature, onClose }: InfoSidebarProps) {
                 'Mini-Verteilzentrum (mVZ)'
               }
             />
+            {p.parent_hub && (
+              <InfoRow label="Übergeordnet" value={p.parent_hub as string} />
+            )}
           </>
         )}
 
-        {feature.type === 'route' && (
+        {feature.type === 'route' && p.vehicle_type === 'Backbone' && (
+          <>
+            <InfoRow label="Typ" value="Backbone-Lieferung" />
+            <InfoRow label="Von" value={p.hub_name as string} />
+            <InfoRow label="Ziel" value={(p.vehicle_id as string).split('→')[1] ?? '—'} />
+            <InfoRow label="Waren" value={`${p.total_items} Einheiten`} />
+            <InfoRow label="Distanz" value={`${p.total_km} km`} />
+            <InfoRow label="Fahrzeit" value={`${(p.total_hours as number).toFixed(1)} h`} />
+            <InfoRow label="Kosten" value={`CHF ${p.total_cost_chf}`} />
+          </>
+        )}
+
+        {feature.type === 'route' && p.vehicle_type !== 'Backbone' && (
           <>
             <InfoRow label="Fahrzeugtyp" value={p.vehicle_type as string} />
             <InfoRow label="Hub" value={p.hub_name as string} />

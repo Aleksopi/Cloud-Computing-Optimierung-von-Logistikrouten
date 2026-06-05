@@ -1,4 +1,5 @@
 import type { PipelineStatus } from '../../types'
+import { COLORS } from '../Map/MapView'
 
 interface LayerToggleProps {
   visibleLayers: Set<string>
@@ -9,10 +10,11 @@ interface LayerToggleProps {
 interface LayerDef {
   key: string
   label: string
-  colors: string[]      // one per sub-item
-  subLabels?: string[]  // optional labels per color
+  colors: string[]
+  subLabels?: string[]
   circle?: boolean
   line?: boolean
+  dashed?: boolean
   step?: number
   always?: boolean
 }
@@ -21,14 +23,14 @@ const LAYERS: LayerDef[] = [
   {
     key: 'pharmacies',
     label: 'Apotheken',
-    colors: ['#3b82f6'],
+    colors: [COLORS.pharmacy],
     circle: true,
     always: true,
   },
   {
     key: 'hubs',
     label: 'Hubs',
-    colors: ['#dc2626', '#ea580c', '#16a34a'],
+    colors: [COLORS.hqFill, COLORS.vzFill, COLORS.mvzFill],
     subLabels: ['HQ', 'VZ', 'mVZ'],
     circle: true,
     step: 1,
@@ -36,15 +38,24 @@ const LAYERS: LayerDef[] = [
   {
     key: 'assignments',
     label: 'Einzugsgebiete',
-    colors: ['#f97316', '#22c55e'],
-    subLabels: ['VZ', 'mVZ'],
+    colors: [COLORS.assignmentVz, COLORS.assignmentMvz],
+    subLabels: ['VZ-Gebiet', 'mVZ-Gebiet'],
     line: true,
     step: 2,
   },
   {
+    key: 'backbone',
+    label: 'Lieferkette',
+    colors: [COLORS.backbone],
+    subLabels: ['HQ → VZ → mVZ'],
+    line: true,
+    dashed: true,
+    step: 4,
+  },
+  {
     key: 'routes',
     label: 'Fahrzeugrouten',
-    colors: ['#16a34a', '#2563eb'],
+    colors: [COLORS.evanRoute, COLORS.lkwRoute],
     subLabels: ['EVan', 'LKW'],
     line: true,
     step: 4,
@@ -56,7 +67,7 @@ export function LayerToggle({ visibleLayers, pipelineStatus, onToggle }: LayerTo
     layer.always || (layer.step !== undefined && pipelineStatus[layer.step]?.status === 'done')
 
   return (
-    <div className="bg-gray-900/92 backdrop-blur rounded-xl p-3 shadow-xl border border-gray-700 text-xs min-w-[200px]">
+    <div className="bg-gray-900/92 backdrop-blur rounded-xl p-3 shadow-xl border border-gray-700 text-xs min-w-[210px]">
       <div className="text-gray-400 font-semibold uppercase tracking-wide text-xs mb-2.5">Layer & Legende</div>
 
       <div className="space-y-2">
@@ -66,7 +77,6 @@ export function LayerToggle({ visibleLayers, pipelineStatus, onToggle }: LayerTo
 
           return (
             <div key={layer.key} className={!on ? 'opacity-40' : ''}>
-              {/* Toggle row */}
               <label className={`flex items-center gap-2 select-none ${on ? 'cursor-pointer' : 'cursor-not-allowed'}`}>
                 <span
                   onClick={() => on && onToggle(layer.key)}
@@ -87,7 +97,6 @@ export function LayerToggle({ visibleLayers, pipelineStatus, onToggle }: LayerTo
                 )}
               </label>
 
-              {/* Color legend sub-items */}
               {on && (
                 <div className="pl-6 mt-1 space-y-0.5">
                   {layer.colors.map((color, i) => (
@@ -98,11 +107,19 @@ export function LayerToggle({ visibleLayers, pipelineStatus, onToggle }: LayerTo
                           style={{ backgroundColor: color }}
                         />
                       )}
-                      {layer.line && (
+                      {layer.line && !layer.dashed && (
                         <span
                           className="w-4 h-0.5 flex-shrink-0 rounded"
                           style={{ backgroundColor: color }}
                         />
+                      )}
+                      {layer.line && layer.dashed && (
+                        <svg width="16" height="4" className="flex-shrink-0">
+                          <line x1="0" y1="2" x2="16" y2="2"
+                            stroke={color} strokeWidth="2"
+                            strokeDasharray="4 3" strokeLinecap="round"
+                          />
+                        </svg>
                       )}
                       {layer.subLabels?.[i] && (
                         <span className="text-gray-400">{layer.subLabels[i]}</span>
@@ -116,7 +133,6 @@ export function LayerToggle({ visibleLayers, pipelineStatus, onToggle }: LayerTo
         })}
       </div>
 
-      {/* Live traffic placeholder */}
       <div className="mt-3 pt-2.5 border-t border-gray-700">
         <div className="flex items-center gap-2 opacity-30">
           <span className="w-4 h-4 rounded border-2 border-gray-600 flex-shrink-0" />

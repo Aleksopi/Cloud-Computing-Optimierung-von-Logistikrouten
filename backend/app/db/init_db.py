@@ -2,6 +2,8 @@ import json
 import logging
 import os
 
+from sqlalchemy import text
+
 from app.config import settings
 from app.db.models import Base, Pharmacy, PipelineRun, PopulationCell
 from app.db.session import SessionLocal, engine
@@ -11,6 +13,7 @@ logger = logging.getLogger(__name__)
 
 def init_db():
     Base.metadata.create_all(bind=engine)
+    _migrate_columns()
     db = SessionLocal()
     try:
         for step in range(1, 5):
@@ -25,6 +28,22 @@ def init_db():
             _import_population(db)
     finally:
         db.close()
+
+
+def _migrate_columns():
+    """Add new columns to existing tables without dropping data (idempotent)."""
+    migrations = [
+        "ALTER TABLE hubs ADD COLUMN IF NOT EXISTS parent_hub VARCHAR",
+        "ALTER TABLE vehicle_routes ADD COLUMN IF NOT EXISTS supply_tier VARCHAR",
+        "ALTER TABLE vehicle_routes ADD COLUMN IF NOT EXISTS co2_kg DOUBLE PRECISION",
+    ]
+    try:
+        for sql in migrations:
+            with engine.begin() as conn:
+                conn.execute(text(sql))
+        logger.info("[init_db] Column migrations applied")
+    except Exception as e:
+        logger.warning(f"[init_db] Migration warning (non-fatal): {e}")
 
 
 def _import_pharmacies(db):

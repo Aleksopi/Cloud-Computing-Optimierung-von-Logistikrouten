@@ -11,3 +11,20 @@ html, body, #root {
 .maplibregl-canvas {
   outline: none;
 }
+
+/* Hover tooltip */
+.map-tooltip .maplibregl-popup-content {
+  background: #ffffff;
+  border-radius: 8px;
+  padding: 8px 12px;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.18);
+  font-family: inherit;
+  pointer-events: none;
+}
+.map-tooltip .maplibregl-popup-tip {
+  border-top-color: #ffffff;
+}
+.map-tooltip strong {
+  color: #0f172a;
+  font-weight: 600;
+}

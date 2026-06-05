@@ -1,4 +1,4 @@
-import type { PipelineStatus, Summary } from '../types'
+import type { FullSummary, PipelineStatus, Summary } from '../types'
 
 async function json<T>(path: string, init?: RequestInit): Promise<T> {
   const r = await fetch(path, init)
@@ -18,4 +18,6 @@ export const api = {
   hubs: () => json<GeoJSON.FeatureCollection>('/api/results/hubs'),
   assignments: () => json<GeoJSON.FeatureCollection>('/api/results/assignments'),
   routes: () => json<GeoJSON.FeatureCollection>('/api/results/routes'),
+  backbone: () => json<GeoJSON.FeatureCollection>('/api/results/backbone'),
+  fullSummary: () => json<FullSummary>('/api/results/summary/full'),
 }

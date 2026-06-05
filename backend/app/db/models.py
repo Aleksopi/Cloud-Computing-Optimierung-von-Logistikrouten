@@ -25,6 +25,7 @@ class Hub(Base):
     hub_type = Column(String, nullable=False)  # HQ, VZ, mVZ
     lat = Column(Float, nullable=False)
     lon = Column(Float, nullable=False)
+    parent_hub = Column(String, nullable=True)  # mVZ → nearest VZ name
 
 
 class Assignment(Base):
@@ -42,7 +43,7 @@ class VehicleRoute(Base):
     id = Column(Integer, primary_key=True)
     hub_name = Column(String, nullable=False)
     vehicle_id = Column(String, nullable=False)
-    vehicle_type = Column(String, nullable=False)  # EVan, LKW
+    vehicle_type = Column(String, nullable=False)  # EVan, LKW, Backbone
     stops = Column(JSON, nullable=True)             # [pharmacy_id, ...]
     stop_coords = Column(JSON, nullable=True)       # [[lon, lat], ...]
     total_km = Column(Float, nullable=True)
@@ -50,6 +51,8 @@ class VehicleRoute(Base):
     total_items = Column(Integer, nullable=True)
     total_cost_chf = Column(Float, nullable=True)
     restock_count = Column(Integer, default=0)
+    supply_tier = Column(String, nullable=True)     # "last_mile" or "backbone"
+    co2_kg = Column(Float, nullable=True)           # kg CO2 for this route
 
 
 class PipelineRun(Base):

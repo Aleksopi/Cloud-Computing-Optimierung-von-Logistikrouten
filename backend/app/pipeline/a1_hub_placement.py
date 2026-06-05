@@ -144,6 +144,13 @@ def run_hub_placement(pharmacies: list[Pharmacy], db) -> None:
 
     db.commit()
 
+    # Assign parent VZ to each mVZ (nearest VZ by haversine)
+    for hub_obj in db.query(Hub).filter(Hub.hub_type == "mVZ").all():
+        nearest_vz = min(vz_list, key=lambda t: _hav(hub_obj.lat, hub_obj.lon, t[1], t[2]))
+        hub_obj.parent_hub = nearest_vz[0]
+    db.commit()
+    logger.info(f"[Step 1] mVZ parent assignments written")
+
     # Assign pharmacies by haversine
     assigned_vz = assigned_mini = 0
     for p in pharmacies:

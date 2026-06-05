@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { StepCard } from './StepCard'
 import { api } from '../../api/client'
 import type { PipelineStatus, Summary } from '../../types'
@@ -13,12 +13,19 @@ interface PipelinePanelProps {
 
 export function PipelinePanel({ status, onRunStep, onReset, loading, error }: PipelinePanelProps) {
   const [summary, setSummary] = useState<Summary | null>(null)
+  const [confirmReset, setConfirmReset] = useState(false)
 
   useEffect(() => {
     if (status[4]?.status === 'done') {
       api.summary().then(setSummary).catch(() => {})
     }
   }, [status[4]?.status])
+
+  const handleReset = useCallback(() => {
+    setConfirmReset(false)
+    setSummary(null)
+    onReset()
+  }, [onReset])
 
   const canRun = (step: number) => {
     if (step === 1) return status[1]?.status !== 'running'
@@ -46,13 +53,34 @@ export function PipelinePanel({ status, onRunStep, onReset, loading, error }: Pi
         </div>
       )}
 
-      <button
-        onClick={onReset}
-        className="w-full text-xs py-1.5 rounded border border-gray-600 text-gray-400
-                   hover:border-gray-400 hover:text-gray-200 transition-colors mb-4"
-      >
-        Pipeline zurücksetzen
-      </button>
+      {!confirmReset ? (
+        <button
+          onClick={() => setConfirmReset(true)}
+          className="w-full text-xs py-1.5 rounded border border-gray-600 text-gray-400
+                     hover:border-gray-400 hover:text-gray-200 transition-colors mb-4"
+        >
+          Pipeline zurücksetzen
+        </button>
+      ) : (
+        <div className="mb-4 rounded border border-red-700/60 bg-red-900/20 p-2.5">
+          <p className="text-xs text-red-300 mb-2 text-center">Alle Ergebnisse löschen?</p>
+          <div className="flex gap-2">
+            <button
+              onClick={handleReset}
+              className="flex-1 text-xs py-1.5 rounded bg-red-700 hover:bg-red-600 text-white font-medium transition-colors"
+            >
+              Ja, zurücksetzen
+            </button>
+            <button
+              onClick={() => setConfirmReset(false)}
+              className="flex-1 text-xs py-1.5 rounded border border-gray-600 text-gray-400
+                         hover:border-gray-400 hover:text-gray-200 transition-colors"
+            >
+              Abbrechen
+            </button>
+          </div>
+        </div>
+      )}
 
       {summary && (
         <div className="bg-gray-800 rounded-lg p-3 text-xs space-y-1.5">
