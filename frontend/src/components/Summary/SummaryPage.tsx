@@ -1,15 +1,13 @@
 import { useEffect, useState } from 'react'
 import { api } from '../../api/client'
 import type { FullSummary, PipelineStatus, VzStats, VehicleConfig } from '../../types'
-import { COLORS } from '../Map/MapView'
+import { COLORS, VEHICLE_ROUTE_COLOR } from '../Map/MapView'
 
 interface SummaryPageProps { pipelineStatus: PipelineStatus }
 
-const VCOL = (name: string, i: number) => {
-  const m: Record<string, string> = { Sprinter: COLORS.sprinterRoute, LKW: COLORS.lkwRoute, Backbone: COLORS.backbone }
-  if (m[name]) return m[name]
-  return ['#f59e0b','#8b5cf6','#06b6d4','#10b981'][i % 4]
-}
+const COLOR_BY_TYPE: Record<string, string> = Object.fromEntries(VEHICLE_ROUTE_COLOR)
+const VCOL = (name: string, i: number) =>
+  COLOR_BY_TYPE[name] ?? ['#f59e0b', '#8b5cf6', '#06b6d4', '#10b981'][i % 4]
 
 export function SummaryPage({ pipelineStatus }: SummaryPageProps) {
   const [data, setData]       = useState<FullSummary | null>(null)
@@ -53,8 +51,9 @@ export function SummaryPage({ pipelineStatus }: SummaryPageProps) {
   if (!data) return null
 
   const { overview, fleet_by_type, fleet, vehicle_specs, optimization, supply_chain } = data
-  const deliverySpecs = vehicle_specs.filter(v => v.vehicle_class === 'delivery' && v.enabled)
-  const backboneSpec  = vehicle_specs.find(v => v.vehicle_class === 'backbone')
+  const deliverySpecs = vehicle_specs.filter(v => v.can_last_mile && v.enabled)
+  const backboneSpec  = vehicle_specs.find(v => v.can_backbone && v.enabled && !v.can_last_mile)
+                        ?? vehicle_specs.find(v => v.can_backbone && v.enabled)
   const lkwSpec       = vehicle_specs.find(v => v.name === 'LKW')
   const co2Saved      = lkwSpec ? Math.max(0, Math.round(fleet.last_mile.total_km * lkwSpec.co2_g_per_km / 1000 - fleet.last_mile.total_co2_kg)) : 0
 
@@ -149,7 +148,7 @@ export function SummaryPage({ pipelineStatus }: SummaryPageProps) {
                 <table className="w-full text-xs">
                   <thead>
                     <tr className="text-slate-500 border-b border-slate-800">
-                      {['Fahrzeug','Kap.','Reichw.','CHF/km','CO₂/km','Tempo','Fahrer/h','Stop'].map(h => (
+                      {['Fahrzeug','Einsatz','Kap.','Reichw.','CHF/km','CO₂/km','Tempo','Fahrer/h','Stop'].map(h => (
                         <th key={h} className="pb-2 pr-4 text-left font-medium">{h}</th>
                       ))}
                     </tr>
@@ -158,6 +157,12 @@ export function SummaryPage({ pipelineStatus }: SummaryPageProps) {
                     {vehicle_specs.filter(v => v.enabled).map((v, i) => (
                       <tr key={v.id} className="text-slate-300 hover:bg-slate-800/20">
                         <td className="py-2 pr-4 font-semibold" style={{ color: VCOL(v.name, i) }}>{v.name}</td>
+                        <td className="py-2 pr-4">
+                          <span className="flex gap-1">
+                            {v.can_last_mile && <span className="px-1 rounded bg-cyan-900/40 text-cyan-300 text-xs">LM</span>}
+                            {v.can_backbone  && <span className="px-1 rounded bg-rose-900/40 text-rose-300 text-xs">BB</span>}
+                          </span>
+                        </td>
                         <td className="py-2 pr-4">{v.capacity ?? '∞'} Einh.</td>
                         <td className="py-2 pr-4">{v.range_km ? `${v.range_km} km` : '—'}</td>
                         <td className="py-2 pr-4">CHF {v.cost_per_km}</td>

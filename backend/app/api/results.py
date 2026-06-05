@@ -43,7 +43,7 @@ def get_hubs():
     try:
         rows = db.query(Hub).all()
 
-        # Build route stats per hub for InfoSidebar enrichment
+        # Route stats per hub (last-mile) for InfoSidebar enrichment
         route_stats: dict[str, dict] = defaultdict(
             lambda: {"vehicle_counts": {}, "total_items": 0, "total_km": 0.0}
         )
@@ -56,11 +56,18 @@ def get_hubs():
             s["total_items"] += r.total_items or 0
             s["total_km"]    += r.total_km or 0
 
+        # Current goods load per hub (sum of assigned pharmacy demand)
+        load: dict[str, int] = defaultdict(int)
+        pharm_count: dict[str, int] = defaultdict(int)
+        for p in db.query(Pharmacy).all():
+            if p.hub_name:
+                load[p.hub_name] += int(p.demand or 0)
+                pharm_count[p.hub_name] += 1
+
         sys_raw = {c.key: c.value for c in db.query(SystemConfig).all()}
         shift_h = float(sys_raw.get("shift_hours", "8.0"))
         start = datetime.time(8, 0)
-        end_h = 8 + int(shift_h)
-        end   = datetime.time(min(end_h, 23), 0)
+        end   = datetime.time(min(8 + int(shift_h), 23), 0)
         delivery_window = f"{start.strftime('%H:%M')} – {end.strftime('%H:%M')} Uhr"
 
         return {
@@ -74,6 +81,9 @@ def get_hubs():
                         "name":            h.name,
                         "hub_type":        h.hub_type,
                         "parent_hub":      h.parent_hub,
+                        "capacity":        h.capacity,
+                        "load":            load.get(h.name, 0),
+                        "pharmacy_count":  pharm_count.get(h.name, 0),
                         # Route stats (available after Step 4)
                         "vehicle_counts":  route_stats[h.name]["vehicle_counts"],
                         "total_items":     route_stats[h.name]["total_items"],
@@ -159,6 +169,7 @@ def get_backbone():
             if r.stop_coords and len(r.stop_coords) >= 2:
                 # tier: "hq_vz" for HQ→VZ routes, "vz_mvz" for VZ→mVZ routes
                 tier = "hq_vz" if r.hub_name == hq_name else "vz_mvz"
+                to_hubs = [str(s) for s in (r.stops or [])]
                 features.append(
                     {
                         "type": "Feature",
@@ -166,6 +177,9 @@ def get_backbone():
                         "properties": {
                             "id":            r.id,
                             "hub_name":      r.hub_name,
+                            "from_hub":      r.hub_name,
+                            "to_hubs":       to_hubs,
+                            "stop_count":    len(to_hubs),
                             "vehicle_id":    r.vehicle_id,
                             "vehicle_type":  r.vehicle_type,
                             "backbone_tier": tier,
@@ -258,14 +272,14 @@ def get_full_summary():
             if p.hub_name:
                 pharm_by_hub.setdefault(p.hub_name, []).append(p)
 
+        # Backbone is multi-stop, so per-leg cost is not isolated per target;
+        # we report straight-line leg distances and let aggregate stats cover cost/CO₂.
         hierarchy = []
         for vz in vz_list:
             vz_mvzs    = [m for m in mvz_list if m.parent_hub == vz.name]
             vz_pharmas = pharm_by_hub.get(vz.name, [])
             mvz_count  = sum(len(pharm_by_hub.get(m.name, [])) for m in vz_mvzs)
             hq_dist    = _hav(hq.lat, hq.lon, vz.lat, vz.lon) if hq else 0
-            bb_hq_vz   = next((r for r in backbone
-                                if r.hub_name == (hq.name if hq else "") and vz.name in (r.vehicle_id or "")), None)
             vz_stat: dict = {
                 "name":              vz.name,
                 "direct_pharmacies": len(vz_pharmas),
@@ -274,23 +288,24 @@ def get_full_summary():
                 "total_items":       (sum(p.demand or 0 for p in vz_pharmas)
                                       + sum(p.demand or 0 for p in pharmacies
                                             if any(p.hub_name == m.name for m in vz_mvzs))),
+                "capacity":          vz.capacity,
+                "load":              sum(p.demand or 0 for p in vz_pharmas),
                 "distance_to_hq_km": round(hq_dist, 1),
-                "backbone_km":       round(bb_hq_vz.total_km, 1)       if bb_hq_vz else None,
-                "backbone_cost_chf": round(bb_hq_vz.total_cost_chf, 2) if bb_hq_vz else None,
-                "backbone_co2_kg":   round(bb_hq_vz.co2_kg, 3)         if (bb_hq_vz and bb_hq_vz.co2_kg) else None,
+                "backbone_km":       round(hq_dist, 1),
+                "backbone_cost_chf": None,
+                "backbone_co2_kg":   None,
                 "mvz": [],
             }
             for mvz in vz_mvzs:
-                mvz_p     = pharm_by_hub.get(mvz.name, [])
-                bb_vz_mvz = next((r for r in backbone
-                                   if r.hub_name == vz.name and mvz.name in (r.vehicle_id or "")), None)
+                mvz_p   = pharm_by_hub.get(mvz.name, [])
+                leg_km  = _hav(vz.lat, vz.lon, mvz.lat, mvz.lon)
                 vz_stat["mvz"].append({
                     "name":            mvz.name,
                     "pharmacy_count":  len(mvz_p),
                     "total_items":     sum(p.demand or 0 for p in mvz_p),
-                    "backbone_km":       round(bb_vz_mvz.total_km, 1)       if bb_vz_mvz else None,
-                    "backbone_cost_chf": round(bb_vz_mvz.total_cost_chf, 2) if bb_vz_mvz else None,
-                    "backbone_co2_kg":   round(bb_vz_mvz.co2_kg, 3)         if (bb_vz_mvz and bb_vz_mvz.co2_kg) else None,
+                    "backbone_km":       round(leg_km, 1),
+                    "backbone_cost_chf": None,
+                    "backbone_co2_kg":   None,
                 })
             hierarchy.append(vz_stat)
 
@@ -316,6 +331,7 @@ def get_full_summary():
             "vehicle_specs": [
                 {
                     "id": v.id, "name": v.name, "vehicle_class": v.vehicle_class,
+                    "can_last_mile": bool(v.can_last_mile), "can_backbone": bool(v.can_backbone),
                     "capacity": v.capacity, "range_km": v.range_km,
                     "cost_per_km": v.cost_per_km, "co2_g_per_km": v.co2_g_per_km,
                     "speed_kmh": v.speed_kmh, "driver_chf_h": v.driver_chf_h,

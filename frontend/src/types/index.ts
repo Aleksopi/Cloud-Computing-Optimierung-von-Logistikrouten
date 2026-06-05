@@ -14,6 +14,27 @@ export interface SelectedFeature {
   properties: Record<string, unknown>
 }
 
+/** Drives map dimming: only related features stay opaque. */
+export interface HighlightState {
+  hubs: string[]            // relevant hub names (the chain)
+  pharmacyId: number | null // highlight a single assignment line
+  routeId: number | null    // highlight a single vehicle route
+}
+
+export interface RouteSummary {
+  id: number
+  hub_name: string
+  vehicle_id: string
+  vehicle_type: string
+  total_km: number
+  total_hours: number
+  total_items: number
+  total_cost_chf: number
+  co2_kg: number | null
+  stop_count: number
+  restock_count: number
+}
+
 export interface Summary {
   hubs: number
   pharmacies_total: number
@@ -31,7 +52,9 @@ export interface Summary {
 export interface VehicleConfig {
   id: number
   name: string
-  vehicle_class: 'delivery' | 'backbone'
+  vehicle_class: string | null
+  can_last_mile: boolean
+  can_backbone: boolean
   capacity: number | null
   range_km: number
   cost_per_km: number

@@ -10,7 +10,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import numpy as np
 
-from app.db.models import Assignment, Hub, Pharmacy
+from app.db.models import Assignment, Hub, Pharmacy, SystemConfig
 from app.services.osrm import osrm_geometry, osrm_table
 
 logger = logging.getLogger(__name__)
@@ -25,15 +25,42 @@ def run_influence(pharmacies: list[Pharmacy], hubs: list[Hub], db) -> None:
     h_names = [h.name for h in hubs]
     n_p = len(pharmacies)
 
+    # Capacity per hub (goods) + demand estimate proxy
+    sys_raw = {c.key: c.value for c in db.query(SystemConfig).all()}
+    demand_est = float(sys_raw.get("default_demand_est", "3"))
+    hub_cap = {h.name: (h.capacity if h.capacity else 10_000_000) for h in hubs}
+
+    def est_demand(p) -> float:
+        return float(p.demand) if p.demand else demand_est
+
     logger.info(f"[Step 2] OSRM table: {n_p} pharmacies × {len(hubs)} hubs…")
     dist_km, time_h = osrm_table(p_coords, h_coords)
 
-    best_hub_idx = np.argmin(time_h, axis=1)  # shape (n_p,)
+    # ── Capacity-aware assignment by drive time ──────────────────────────────
+    # Closest pharmacies (by best drive time) pick first; if their nearest hub
+    # is full, they overflow to the next-nearest hub with remaining capacity.
+    best_time = np.min(time_h, axis=1)
+    p_order = sorted(range(n_p), key=lambda i: best_time[i])
+    load = {name: 0.0 for name in h_names}
 
-    assignments_map: dict[int, tuple[str, float, float]] = {
-        i: (h_names[int(best_hub_idx[i])], float(dist_km[i, best_hub_idx[i]]), float(time_h[i, best_hub_idx[i]]))
-        for i in range(n_p)
-    }
+    assignments_map: dict[int, tuple[str, float, float]] = {}
+    overflow = 0
+    for i in p_order:
+        d = est_demand(pharmacies[i])
+        hub_pref = sorted(range(len(hubs)), key=lambda j: time_h[i, j])
+        chosen_j = None
+        for j in hub_pref:
+            if load[h_names[j]] + d <= hub_cap[h_names[j]]:
+                chosen_j = j
+                break
+        if chosen_j is None:
+            chosen_j = hub_pref[0]
+            overflow += 1
+        load[h_names[chosen_j]] += d
+        assignments_map[i] = (
+            h_names[chosen_j], float(dist_km[i, chosen_j]), float(time_h[i, chosen_j])
+        )
+    logger.info(f"[Step 2] Assignment done ({overflow} over-capacity overflow)")
 
     logger.info(f"[Step 2] Fetching {n_p} road geometries (parallel)…")
 

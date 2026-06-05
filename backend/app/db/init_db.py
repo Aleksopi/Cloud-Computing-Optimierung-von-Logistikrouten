@@ -11,16 +11,21 @@ from app.db.session import SessionLocal, engine
 logger = logging.getLogger(__name__)
 
 # ── Default vehicle fleet ──────────────────────────────────────────────────────
+# can_last_mile  → usable for Hub → Apotheke delivery
+# can_backbone   → usable for HQ → Hub and VZ → mVZ replenishment
 DEFAULT_VEHICLES = [
-    dict(name="Sprinter", vehicle_class="delivery", capacity=15, range_km=350.0,
-         cost_per_km=0.38, co2_g_per_km=185.0, speed_kmh=65.0, driver_chf_h=45.0,
-         service_min=20, max_per_hub=10, restock_threshold=5, sort_order=1, enabled=True),
-    dict(name="LKW", vehicle_class="delivery", capacity=200, range_km=500.0,
-         cost_per_km=1.20, co2_g_per_km=280.0, speed_kmh=75.0, driver_chf_h=55.0,
-         service_min=35, max_per_hub=5, restock_threshold=20, sort_order=2, enabled=True),
-    dict(name="Backbone", vehicle_class="backbone", capacity=None, range_km=1000.0,
-         cost_per_km=2.50, co2_g_per_km=450.0, speed_kmh=85.0, driver_chf_h=None,
-         service_min=None, max_per_hub=None, restock_threshold=None, sort_order=0, enabled=True),
+    dict(name="Sprinter",  vehicle_class="delivery", can_last_mile=True,  can_backbone=True,
+         capacity=15,   range_km=350.0,  cost_per_km=0.38, co2_g_per_km=185.0, speed_kmh=65.0,
+         driver_chf_h=45.0, service_min=20, max_per_hub=10, restock_threshold=5,  sort_order=1, enabled=True),
+    dict(name="Klein-LKW", vehicle_class="delivery", can_last_mile=True,  can_backbone=True,
+         capacity=40,   range_km=450.0,  cost_per_km=0.70, co2_g_per_km=230.0, speed_kmh=70.0,
+         driver_chf_h=50.0, service_min=25, max_per_hub=6,  restock_threshold=10, sort_order=2, enabled=True),
+    dict(name="LKW",       vehicle_class="backbone", can_last_mile=False, can_backbone=True,
+         capacity=200,  range_km=600.0,  cost_per_km=1.20, co2_g_per_km=280.0, speed_kmh=75.0,
+         driver_chf_h=55.0, service_min=35, max_per_hub=5,  restock_threshold=30, sort_order=3, enabled=True),
+    dict(name="Zug",       vehicle_class="backbone", can_last_mile=False, can_backbone=True,
+         capacity=1000, range_km=2000.0, cost_per_km=3.20, co2_g_per_km=520.0, speed_kmh=90.0,
+         driver_chf_h=70.0, service_min=45, max_per_hub=3,  restock_threshold=100, sort_order=4, enabled=True),
 ]
 
 # ── Default system configuration ──────────────────────────────────────────────
@@ -34,6 +39,9 @@ DEFAULT_SYSTEM_CONFIG = [
     ("co2_shadow_chf",      "0.12",   "CO₂-Schattenpreis (CHF/kg)",        "Monetarisierung der Umweltkosten"),
     ("max_catchment_km",    "10.0",   "Max. Einzugsgebiet-Radius (km)",    "Für Warenbedarf-Berechnung"),
     ("vz_hard_radius_km",   "45.0",   "VZ-Zuweisungsradius (km)",          "Apotheke → direkt zu VZ wenn ≤ Radius"),
+    ("vz_capacity",         "320",    "VZ-Lagerkapazität (Einheiten)",     "Max. Warenmenge je Verteilzentrum"),
+    ("mvz_capacity",        "90",     "mVZ-Lagerkapazität (Einheiten)",    "Max. Warenmenge je Mini-Verteilzentrum"),
+    ("default_demand_est",  "3",      "Bedarfsschätzung pro Apotheke",     "Proxy für Kapazitätsprüfung vor Step 3"),
 ]
 
 
@@ -53,11 +61,8 @@ def init_db():
         if db.query(PopulationCell).count() == 0:
             _import_population(db)
 
-        if db.query(VehicleFleetConfig).count() == 0:
-            _seed_vehicles(db)
-
-        if db.query(SystemConfig).count() == 0:
-            _seed_system_config(db)
+        _ensure_vehicles(db)
+        _ensure_system_config(db)
     finally:
         db.close()
 
@@ -66,8 +71,11 @@ def _migrate_columns():
     """Add new columns to existing tables without dropping data (idempotent)."""
     migrations = [
         "ALTER TABLE hubs ADD COLUMN IF NOT EXISTS parent_hub VARCHAR",
+        "ALTER TABLE hubs ADD COLUMN IF NOT EXISTS capacity INTEGER",
         "ALTER TABLE vehicle_routes ADD COLUMN IF NOT EXISTS supply_tier VARCHAR",
         "ALTER TABLE vehicle_routes ADD COLUMN IF NOT EXISTS co2_kg DOUBLE PRECISION",
+        "ALTER TABLE vehicle_fleet_configs ADD COLUMN IF NOT EXISTS can_last_mile BOOLEAN DEFAULT FALSE",
+        "ALTER TABLE vehicle_fleet_configs ADD COLUMN IF NOT EXISTS can_backbone BOOLEAN DEFAULT FALSE",
     ]
     try:
         for sql in migrations:
@@ -78,18 +86,32 @@ def _migrate_columns():
         logger.warning(f"[init_db] Migration warning (non-fatal): {e}")
 
 
-def _seed_vehicles(db):
-    for v in DEFAULT_VEHICLES:
-        db.add(VehicleFleetConfig(**v))
-    db.commit()
-    logger.info(f"[init_db] Seeded {len(DEFAULT_VEHICLES)} vehicle configs")
+def _ensure_vehicles(db):
+    """Seed the canonical fleet. If the new vehicle line-up (Klein-LKW, Zug) is
+    missing, the fleet predates the tier model → wipe and reseed cleanly."""
+    existing = db.query(VehicleFleetConfig).all()
+    names = {v.name for v in existing}
+    needs_reseed = not existing or "Klein-LKW" not in names or "Zug" not in names
+    if needs_reseed:
+        db.query(VehicleFleetConfig).delete()
+        db.commit()
+        for v in DEFAULT_VEHICLES:
+            db.add(VehicleFleetConfig(**v))
+        db.commit()
+        logger.info(f"[init_db] Fleet (re)seeded — {len(DEFAULT_VEHICLES)} vehicles")
 
 
-def _seed_system_config(db):
+def _ensure_system_config(db):
+    """Insert any missing config keys without overwriting user-edited values."""
+    existing = {c.key for c in db.query(SystemConfig).all()}
+    added = 0
     for key, value, label, description in DEFAULT_SYSTEM_CONFIG:
-        db.add(SystemConfig(key=key, value=value, label=label, description=description))
-    db.commit()
-    logger.info(f"[init_db] Seeded {len(DEFAULT_SYSTEM_CONFIG)} system config entries")
+        if key not in existing:
+            db.add(SystemConfig(key=key, value=value, label=label, description=description))
+            added += 1
+    if added:
+        db.commit()
+        logger.info(f"[init_db] Added {added} system config entries")
 
 
 def _import_pharmacies(db):

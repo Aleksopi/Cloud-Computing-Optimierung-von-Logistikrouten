@@ -26,10 +26,10 @@ export function SettingsPage() {
   const startEdit = (v: VehicleConfig) => { setEditId(v.id); setEditBuf({ ...v }) }
   const startNew  = () => {
     setEditId('new')
-    setEditBuf({ name: '', vehicle_class: 'delivery', capacity: 30, range_km: 350,
-      cost_per_km: 0.38, co2_g_per_km: 185, speed_kmh: 65, driver_chf_h: 45,
-      service_min: 20, max_per_hub: 10, restock_threshold: 5,
-      sort_order: vehicles.filter(v => v.vehicle_class === 'delivery').length + 1, enabled: true })
+    setEditBuf({ name: '', vehicle_class: null, can_last_mile: true, can_backbone: false,
+      capacity: 30, range_km: 350, cost_per_km: 0.38, co2_g_per_km: 185, speed_kmh: 65,
+      driver_chf_h: 45, service_min: 20, max_per_hub: 10, restock_threshold: 5,
+      sort_order: vehicles.length + 1, enabled: true })
   }
   const cancelEdit = () => { setEditId(null); setEditBuf({}) }
 
@@ -126,7 +126,7 @@ export function SettingsPage() {
             <table className="w-full text-xs">
               <thead className="bg-slate-800/40">
                 <tr className="text-slate-500 uppercase tracking-wide text-xs">
-                  {['Name','Klasse','Kap.','Reichw.','CHF/km','CO₂/km','Tempo','Fahrer/h','Stop','Max/Hub','Prio','Aktiv',''].map(h => (
+                  {['Name','Einsatz','Kap.','Reichw.','CHF/km','CO₂/km','Tempo','Fahrer/h','Stop','Max/Hub','Prio','Aktiv',''].map(h => (
                     <th key={h} className="px-4 py-2.5 text-left font-medium whitespace-nowrap">{h}</th>
                   ))}
                 </tr>
@@ -160,6 +160,7 @@ export function SettingsPage() {
                 <h4 className="text-xs font-semibold text-slate-400 uppercase tracking-wide">Logistikparameter</h4>
                 {[
                   'population_per_item', 'max_catchment_km', 'vz_hard_radius_km',
+                  'vz_capacity', 'mvz_capacity', 'default_demand_est',
                   'shift_hours', 'traffic_factor', 'co2_shadow_chf',
                 ].map(key => (
                   <SysField key={key} conf={sysConf.find(c => c.key === key)}
@@ -233,13 +234,11 @@ function VehicleRow({ v, onEdit, onDelete }: { v: VehicleConfig; onEdit: () => v
     <tr className={`hover:bg-slate-800/30 transition-colors ${!v.enabled ? 'opacity-40' : ''}`}>
       <td className="px-4 py-3 font-semibold text-slate-200">{v.name}</td>
       <td className="px-4 py-3">
-        <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
-          v.vehicle_class === 'backbone'
-            ? 'bg-slate-700 text-slate-300'
-            : 'bg-blue-900/40 text-blue-300 border border-blue-700/40'
-        }`}>
-          {v.vehicle_class === 'backbone' ? 'Backbone' : 'Lieferung'}
-        </span>
+        <div className="flex gap-1">
+          {v.can_last_mile && <span className="px-1.5 py-0.5 rounded text-xs font-medium bg-cyan-900/40 text-cyan-300 border border-cyan-700/40">Last-Mile</span>}
+          {v.can_backbone  && <span className="px-1.5 py-0.5 rounded text-xs font-medium bg-rose-900/40 text-rose-300 border border-rose-700/40">Backbone</span>}
+          {!v.can_last_mile && !v.can_backbone && <span className="text-xs text-slate-600">—</span>}
+        </div>
       </td>
       <td className="px-4 py-3 text-slate-400">{v.capacity ?? '∞'}</td>
       <td className="px-4 py-3 text-slate-400">{v.range_km} km</td>
@@ -289,11 +288,16 @@ function EditRow({ buf, onChange, onSave, onCancel, saving }: {
     <tr className="bg-blue-950/20 border-t border-b border-blue-800/40">
       {[
         <In key="name" value={buf.name ?? ''} onChange={set('name')} placeholder="Name" />,
-        <select key="vc" value={buf.vehicle_class ?? 'delivery'} onChange={set('vehicle_class')}
-                className="bg-slate-800 text-slate-200 text-xs rounded-md px-2 py-1 border border-slate-600 w-full">
-          <option value="delivery">Lieferung</option>
-          <option value="backbone">Backbone</option>
-        </select>,
+        <div key="tiers" className="flex flex-col gap-1">
+          <label className="flex items-center gap-1 text-xs text-cyan-300 whitespace-nowrap">
+            <input type="checkbox" checked={buf.can_last_mile ?? false} onChange={setCheck('can_last_mile')} className="accent-cyan-500 w-3 h-3" />
+            Last-Mile
+          </label>
+          <label className="flex items-center gap-1 text-xs text-rose-300 whitespace-nowrap">
+            <input type="checkbox" checked={buf.can_backbone ?? false} onChange={setCheck('can_backbone')} className="accent-rose-500 w-3 h-3" />
+            Backbone
+          </label>
+        </div>,
         <In key="cap" value={buf.capacity ?? ''} onChange={set('capacity')} type="number" placeholder="∞" />,
         <In key="rng" value={buf.range_km ?? ''} onChange={set('range_km')} type="number" />,
         <In key="cst" value={buf.cost_per_km ?? ''} onChange={set('cost_per_km')} type="number" step="0.01" />,

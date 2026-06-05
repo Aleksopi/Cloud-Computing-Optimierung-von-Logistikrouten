@@ -26,6 +26,7 @@ class Hub(Base):
     lat = Column(Float, nullable=False)
     lon = Column(Float, nullable=False)
     parent_hub = Column(String, nullable=True)  # mVZ → nearest VZ name
+    capacity = Column(Integer, nullable=True)   # warehouse capacity in goods units
 
 
 class Assignment(Base):
@@ -78,7 +79,9 @@ class VehicleFleetConfig(Base):
     __tablename__ = "vehicle_fleet_configs"
     id                = Column(Integer, primary_key=True)
     name              = Column(String, nullable=False)         # display name & vehicle_type key
-    vehicle_class     = Column(String, nullable=False)         # "delivery" or "backbone"
+    vehicle_class     = Column(String, nullable=True)          # legacy; kept for compat
+    can_last_mile     = Column(Boolean, default=False)         # usable Hub → Apotheke
+    can_backbone      = Column(Boolean, default=False)         # usable HQ → Hub / VZ → mVZ
     capacity          = Column(Integer, nullable=True)         # items per load (None = unlimited)
     range_km          = Column(Float, nullable=False)
     cost_per_km       = Column(Float, nullable=False)

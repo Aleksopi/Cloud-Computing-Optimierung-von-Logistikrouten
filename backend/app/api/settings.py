@@ -17,7 +17,9 @@ router = APIRouter()
 
 class VehicleBody(BaseModel):
     name: str
-    vehicle_class: str            # "delivery" or "backbone"
+    vehicle_class: str | None = None   # legacy, optional
+    can_last_mile: bool = False        # usable Hub → Apotheke
+    can_backbone: bool = False         # usable HQ → Hub / VZ → mVZ
     capacity: int | None = None
     range_km: float
     cost_per_km: float
@@ -126,6 +128,8 @@ def _vehicle_dict(v: VehicleFleetConfig) -> dict:
         "id":                v.id,
         "name":              v.name,
         "vehicle_class":     v.vehicle_class,
+        "can_last_mile":     bool(v.can_last_mile),
+        "can_backbone":      bool(v.can_backbone),
         "capacity":          v.capacity,
         "range_km":          v.range_km,
         "cost_per_km":       v.cost_per_km,

@@ -1,15 +1,17 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { MapView } from './components/Map/MapView'
 import { PipelinePanel } from './components/Pipeline/PipelinePanel'
 import { InfoSidebar } from './components/Sidebar/InfoSidebar'
 import { LayerToggle } from './components/Sidebar/LayerToggle'
+import { HubRoutesPanel } from './components/Sidebar/HubRoutesPanel'
 import { SummaryPage } from './components/Summary/SummaryPage'
 import { SettingsPage } from './components/Settings/SettingsPage'
 import { usePipeline } from './hooks/usePipeline'
 import { api } from './api/client'
-import type { SelectedFeature } from './types'
+import type { SelectedFeature, HighlightState } from './types'
 
 type View = 'map' | 'summary' | 'settings'
+interface HubInfo { type: string; parent: string | null }
 
 export default function App() {
   const { status, runStep, reset, loading, error } = usePipeline()
@@ -17,66 +19,105 @@ export default function App() {
   const [selected,          setSelected]          = useState<SelectedFeature | null>(null)
   const [view,              setView]              = useState<View>('map')
   const [focusedHub,        setFocusedHub]        = useState<string | null>(null)
+  const [hubPanel,          setHubPanel]          = useState<string | null>(null)
+  const [selectedRouteId,   setSelectedRouteId]   = useState<number | null>(null)
   const [vehicleTypes,      setVehicleTypes]      = useState<string[]>([])
   const [vehicleTypeFilter, setVehicleTypeFilter] = useState<Set<string>>(new Set())
+  const [hubMap,            setHubMap]            = useState<Map<string, HubInfo>>(new Map())
   const [visibleLayers, setVisibleLayers] = useState(
     () => new Set(['pharmacies', 'hubs', 'assignments', 'backbone', 'routes']),
   )
 
+  // Last-mile vehicle types (for the route filter UI)
   useEffect(() => {
     api.getVehicles()
-      .then(vehicles => {
-        const types = vehicles
-          .filter(v => v.vehicle_class === 'delivery' && v.enabled)
-          .sort((a, b) => a.sort_order - b.sort_order)
-          .map(v => v.name)
-        setVehicleTypes(types)
-        setVehicleTypeFilter(new Set(types))
+      .then(vs => {
+        const types = vs.filter(v => v.can_last_mile && v.enabled)
+          .sort((a, b) => a.sort_order - b.sort_order).map(v => v.name)
+        setVehicleTypes(types); setVehicleTypeFilter(new Set(types))
       })
-      .catch(() => {
-        setVehicleTypes(['Sprinter', 'LKW'])
-        setVehicleTypeFilter(new Set(['Sprinter', 'LKW']))
-      })
+      .catch(() => { setVehicleTypes(['Sprinter', 'Klein-LKW']); setVehicleTypeFilter(new Set(['Sprinter', 'Klein-LKW'])) })
   }, [])
 
+  // Hub hierarchy (for supply-chain highlight) — refetched when Step 1 completes
+  const step1Key = status[1]?.finished_at ?? status[1]?.status
+  useEffect(() => {
+    if (status[1]?.status !== 'done') { setHubMap(new Map()); return }
+    api.hubs().then(fc => {
+      const m = new Map<string, HubInfo>()
+      for (const f of fc.features) {
+        const p = f.properties as any
+        m.set(p.name, { type: p.hub_type, parent: p.parent_hub ?? null })
+      }
+      setHubMap(m)
+    }).catch(() => {})
+  }, [step1Key, status[1]?.status])
+
   const toggleLayer = (layer: string) =>
-    setVisibleLayers(prev => {
-      const next = new Set(prev)
-      next.has(layer) ? next.delete(layer) : next.add(layer)
-      return next
-    })
+    setVisibleLayers(prev => { const n = new Set(prev); n.has(layer) ? n.delete(layer) : n.add(layer); return n })
 
   const toggleVehicleType = (type: string) => {
     setVehicleTypeFilter(prev => {
       if (prev.size === vehicleTypes.length || prev.size === 0) return new Set([type])
-      const next = new Set(prev)
-      if (next.has(type)) {
-        next.delete(type)
-        if (next.size === 0) return new Set(vehicleTypes)
-      } else {
-        next.add(type)
-        if (next.size === vehicleTypes.length) return new Set(vehicleTypes)
-      }
-      return next
+      const n = new Set(prev)
+      if (n.has(type)) { n.delete(type); if (n.size === 0) return new Set(vehicleTypes) }
+      else { n.add(type); if (n.size === vehicleTypes.length) return new Set(vehicleTypes) }
+      return n
     })
   }
 
+  // Reset transient state when pipeline resets
   useEffect(() => {
-    if (status[1]?.status === 'idle') setFocusedHub(null)
+    if (status[1]?.status === 'idle') {
+      setFocusedHub(null); setHubPanel(null); setSelectedRouteId(null); setSelected(null)
+    }
   }, [status[1]?.status])
+
+  // ── Supply-chain highlight derivation ──────────────────────────────────────
+  const chainOf = (name: string): string[] => {
+    const info = hubMap.get(name)
+    const hqEntry = [...hubMap.entries()].find(([, v]) => v.type === 'HQ')
+    const hq = hqEntry ? [hqEntry[0]] : []
+    if (!info) return [name, ...hq]
+    if (info.type === 'HQ') return [name]
+    if (info.type === 'VZ') {
+      const children = [...hubMap.entries()]
+        .filter(([, v]) => v.type === 'mVZ' && v.parent === name).map(([k]) => k)
+      return [name, ...hq, ...children]
+    }
+    return [name, ...(info.parent ? [info.parent] : []), ...hq]  // mVZ
+  }
+
+  const highlight: HighlightState | null = useMemo(() => {
+    if (hubPanel) {
+      return { hubs: chainOf(hubPanel), pharmacyId: null, routeId: selectedRouteId }
+    }
+    if (!selected) return null
+    const p = selected.properties as any
+    if (selected.type === 'hub')      return { hubs: chainOf(p.name), pharmacyId: null, routeId: null }
+    if (selected.type === 'pharmacy') return { hubs: p.hub_name ? chainOf(p.hub_name) : [], pharmacyId: p.id ?? null, routeId: null }
+    // route
+    if (p.backbone_tier) {
+      let to: string[] = []
+      try { to = typeof p.to_hubs === 'string' ? JSON.parse(p.to_hubs) : (p.to_hubs ?? []) } catch { /* */ }
+      return { hubs: [p.from_hub, ...to].filter(Boolean), pharmacyId: null, routeId: null }
+    }
+    return { hubs: p.hub_name ? [p.hub_name] : [], pharmacyId: null, routeId: p.id ?? null }
+  }, [selected, hubPanel, selectedRouteId, hubMap])
 
   const step4Done    = status[4]?.status === 'done'
   const isAnyRunning = Object.values(status).some(s => s.status === 'running')
-  const overallStatus = isAnyRunning ? 'running'
+  const overall = isAnyRunning ? 'running'
     : Object.values(status).some(s => s.status === 'error') ? 'error'
     : step4Done ? 'done' : 'idle'
+
+  const closeAllOverlays = () => { setSelected(null); setHubPanel(null); setSelectedRouteId(null) }
 
   return (
     <div className="flex flex-col h-screen bg-slate-950 text-slate-100 overflow-hidden">
 
-      {/* ── Top navigation bar ─────────────────────────────────────────── */}
+      {/* ── Top bar ──────────────────────────────────────────────────────── */}
       <header className="flex-shrink-0 flex items-center h-12 px-4 bg-slate-900 border-b border-slate-700/60 z-30">
-        {/* Brand */}
         <div className="flex items-center gap-2.5 mr-6">
           <div className="flex items-center justify-center w-7 h-7 rounded-md bg-blue-600">
             <svg className="w-4 h-4 text-white" viewBox="0 0 20 20" fill="none">
@@ -90,160 +131,114 @@ export default function App() {
           </div>
         </div>
 
-        {/* View tabs */}
         <nav className="flex items-center gap-0.5 flex-1">
           {([
-            { id: 'map',      label: 'Karte',          icon: MapIcon },
-            { id: 'summary',  label: 'Analyse',        icon: ChartIcon, gate: !step4Done, gateLabel: 'nach Schritt 4' },
-            { id: 'settings', label: 'Einstellungen',  icon: GearIcon },
+            { id: 'map', label: 'Karte', icon: MapIcon },
+            { id: 'summary', label: 'Analyse', icon: ChartIcon, gate: !step4Done },
+            { id: 'settings', label: 'Einstellungen', icon: GearIcon },
           ] as const).map(tab => (
-            <button
-              key={tab.id}
+            <button key={tab.id}
               onClick={() => !('gate' in tab && tab.gate) && setView(tab.id)}
               disabled={'gate' in tab && tab.gate}
-              title={'gate' in tab && tab.gate ? tab.gateLabel : undefined}
-              className={`
-                flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors
-                ${ view === tab.id
-                  ? 'bg-blue-600/20 text-blue-300 border border-blue-600/40'
-                  : 'gate' in tab && tab.gate
-                    ? 'text-slate-600 cursor-not-allowed'
-                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'
-                }
-              `}
-            >
-              <tab.icon className="w-3.5 h-3.5" />
-              {tab.label}
-              {'gate' in tab && tab.gate && (
-                <span className="text-slate-600 text-xs">⋯</span>
-              )}
+              title={'gate' in tab && tab.gate ? 'Verfügbar nach Schritt 4' : undefined}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors
+                ${view === tab.id ? 'bg-blue-600/20 text-blue-300 border border-blue-600/40'
+                  : 'gate' in tab && tab.gate ? 'text-slate-600 cursor-not-allowed'
+                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'}`}>
+              <tab.icon className="w-3.5 h-3.5" />{tab.label}
             </button>
           ))}
         </nav>
 
-        {/* System status */}
         <div className="flex items-center gap-2 text-xs">
-          <span className={`status-dot ${overallStatus}`} />
+          <span className={`status-dot ${overall}`} />
           <span className="text-slate-400">
-            {overallStatus === 'running' ? 'Pipeline läuft…'
-            : overallStatus === 'done'    ? 'Pipeline abgeschlossen'
-            : overallStatus === 'error'   ? 'Fehler'
-            : '400 Apotheken · Schweiz'}
+            {overall === 'running' ? 'Pipeline läuft…' : overall === 'done' ? 'Pipeline abgeschlossen'
+              : overall === 'error' ? 'Fehler' : '400 Apotheken · Schweiz'}
           </span>
         </div>
       </header>
 
-      {/* ── Body ───────────────────────────────────────────────────────── */}
+      {/* ── Body ─────────────────────────────────────────────────────────── */}
       <div className="flex flex-1 overflow-hidden">
-
-        {/* ── Sidebar ──────────────────────────────────────────────────── */}
         <aside className="w-64 flex-shrink-0 flex flex-col bg-slate-900 border-r border-slate-700/60 overflow-hidden">
-          <PipelinePanel
-            status={status}
-            onRunStep={runStep}
-            onReset={() => { reset(); setFocusedHub(null) }}
-            loading={loading}
-            error={error}
-          />
+          <PipelinePanel status={status} onRunStep={runStep}
+            onReset={() => { reset(); closeAllOverlays(); setFocusedHub(null) }}
+            loading={loading} error={error} />
         </aside>
 
-        {/* ── Main area ─────────────────────────────────────────────────── */}
         <main className="flex-1 relative overflow-hidden">
-
-          {/* Map view */}
           <div className={view === 'map' ? 'absolute inset-0' : 'hidden'}>
             <MapView
               pipelineStatus={status}
-              onFeatureSelect={setSelected}
+              onFeatureSelect={f => { setSelected(f); setHubPanel(null); setSelectedRouteId(null) }}
               visibleLayers={visibleLayers}
               isAnyRunning={isAnyRunning}
               focusedHub={focusedHub}
               vehicleTypeFilter={vehicleTypeFilter}
+              highlight={highlight}
             />
 
-            {/* Layer toggle */}
             <div className="absolute bottom-8 left-4 z-10">
-              <LayerToggle
-                visibleLayers={visibleLayers}
-                pipelineStatus={status}
-                onToggle={toggleLayer}
-                vehicleTypes={vehicleTypes}
-                vehicleTypeFilter={vehicleTypeFilter}
-                onToggleVehicle={toggleVehicleType}
-              />
+              <LayerToggle visibleLayers={visibleLayers} pipelineStatus={status} onToggle={toggleLayer}
+                vehicleTypes={vehicleTypes} vehicleTypeFilter={vehicleTypeFilter} onToggleVehicle={toggleVehicleType} />
             </div>
 
-            {/* Hub focus banner */}
-            {focusedHub && (
+            {(focusedHub || highlight) && (
               <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10
-                              bg-blue-700/95 backdrop-blur border border-blue-500/40
-                              rounded-full px-4 py-1.5 flex items-center gap-3 shadow-xl text-xs">
+                              bg-blue-700/95 backdrop-blur border border-blue-500/40 rounded-full
+                              px-4 py-1.5 flex items-center gap-3 shadow-xl text-xs">
                 <span className="w-2 h-2 rounded-full bg-blue-300 animate-pulse" />
-                <span className="text-white font-medium">Routen: {focusedHub}</span>
-                <button onClick={() => setFocusedHub(null)}
-                        className="text-blue-200 hover:text-white ml-1 font-medium">
-                  ✕ Alle
-                </button>
+                <span className="text-white font-medium">
+                  {focusedHub ? `Nur Routen: ${focusedHub}` : 'Lieferkette hervorgehoben'}
+                </span>
+                <button onClick={() => { setFocusedHub(null); closeAllOverlays() }}
+                        className="text-blue-200 hover:text-white font-medium">✕ Zurücksetzen</button>
               </div>
             )}
 
-            {/* Feature info panel */}
-            {selected && (
+            {/* Info panel (top-right) */}
+            {selected && !hubPanel && (
               <div className="absolute top-4 right-4 z-10">
-                <InfoSidebar
-                  feature={selected}
-                  onClose={() => setSelected(null)}
-                  focusedHub={focusedHub}
-                  onFocusHub={setFocusedHub}
-                />
+                <InfoSidebar feature={selected} onClose={() => setSelected(null)}
+                  focusedHub={focusedHub} onFocusHub={setFocusedHub}
+                  onOpenHubPanel={hn => { setHubPanel(hn); setSelected(null) }} />
+              </div>
+            )}
+
+            {/* Hub overview drawer (right) */}
+            {hubPanel && (
+              <div className="absolute top-4 right-4 bottom-4 z-10">
+                <HubRoutesPanel hubName={hubPanel}
+                  selectedRouteId={selectedRouteId}
+                  onSelectRoute={setSelectedRouteId}
+                  onClose={() => { setHubPanel(null); setSelectedRouteId(null) }} />
               </div>
             )}
           </div>
 
-          {/* Summary page */}
-          {view === 'summary' && (
-            <div className="absolute inset-0">
-              <SummaryPage pipelineStatus={status} />
-            </div>
-          )}
-
-          {/* Settings page */}
-          {view === 'settings' && (
-            <div className="absolute inset-0">
-              <SettingsPage />
-            </div>
-          )}
-
+          {view === 'summary'  && <div className="absolute inset-0"><SummaryPage pipelineStatus={status} /></div>}
+          {view === 'settings' && <div className="absolute inset-0"><SettingsPage /></div>}
         </main>
       </div>
     </div>
   )
 }
 
-/* ── Icon components ─────────────────────────────────────────────────────── */
 function MapIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 16 16" fill="none">
-      <path d="M5 2L1 4v10l4-2 6 2 4-2V2L15 4 9 2 5 2Z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/>
-      <path d="M5 2v10M11 4v10" stroke="currentColor" strokeWidth="1.3"/>
-    </svg>
-  )
+  return <svg className={className} viewBox="0 0 16 16" fill="none">
+    <path d="M5 2L1 4v10l4-2 6 2 4-2V2L15 4 9 2 5 2Z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/>
+    <path d="M5 2v10M11 4v10" stroke="currentColor" strokeWidth="1.3"/></svg>
 }
 function ChartIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 16 16" fill="none">
-      <rect x="1" y="9" width="3" height="6" rx="1" fill="currentColor"/>
-      <rect x="6" y="5" width="3" height="10" rx="1" fill="currentColor"/>
-      <rect x="11" y="1" width="3" height="14" rx="1" fill="currentColor"/>
-    </svg>
-  )
+  return <svg className={className} viewBox="0 0 16 16" fill="none">
+    <rect x="1" y="9" width="3" height="6" rx="1" fill="currentColor"/>
+    <rect x="6" y="5" width="3" height="10" rx="1" fill="currentColor"/>
+    <rect x="11" y="1" width="3" height="14" rx="1" fill="currentColor"/></svg>
 }
 function GearIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 16 16" fill="none">
-      <circle cx="8" cy="8" r="2" stroke="currentColor" strokeWidth="1.3"/>
-      <path d="M8 1.5v2M8 12.5v2M1.5 8h2M12.5 8h2M3.4 3.4l1.4 1.4M11.2 11.2l1.4 1.4M3.4 12.6l1.4-1.4M11.2 4.8l1.4-1.4"
-            stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
-    </svg>
-  )
+  return <svg className={className} viewBox="0 0 16 16" fill="none">
+    <circle cx="8" cy="8" r="2" stroke="currentColor" strokeWidth="1.3"/>
+    <path d="M8 1.5v2M8 12.5v2M1.5 8h2M12.5 8h2M3.4 3.4l1.4 1.4M11.2 11.2l1.4 1.4M3.4 12.6l1.4-1.4M11.2 4.8l1.4-1.4"
+          stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>
 }

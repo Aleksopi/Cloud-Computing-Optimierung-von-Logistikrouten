@@ -1,5 +1,7 @@
 import type { PipelineStatus } from '../../types'
-import { COLORS } from '../Map/MapView'
+import { COLORS, VEHICLE_ROUTE_COLOR } from '../Map/MapView'
+
+const COLOR_BY_TYPE: Record<string, string> = Object.fromEntries(VEHICLE_ROUTE_COLOR)
 
 interface Props {
   visibleLayers:     Set<string>
@@ -22,10 +24,11 @@ const LAYERS: LayerDef[] = [
   { key: 'hubs',       label: 'Hubs',           colors: [COLORS.hqFill, COLORS.vzFill, COLORS.mvzFill], subLabels: ['HQ','VZ','mVZ'], circle: true, step: 1 },
   { key: 'assignments',label: 'Einzugsgebiete', colors: [COLORS.assignmentVz, COLORS.assignmentMvz],   subLabels: ['VZ','mVZ'],      line: true,   step: 2 },
   { key: 'backbone',   label: 'Lieferkette',    colors: [COLORS.backboneHqVz, COLORS.backboneVzMvz],   subLabels: ['HQ→VZ','VZ→mVZ'], line: true, step: 4 },
-  { key: 'routes',     label: 'Fahrzeugrouten', colors: [COLORS.sprinterRoute, COLORS.lkwRoute],        subLabels: ['Sprinter','LKW'], line: true,  step: 4 },
+  { key: 'routes',     label: 'Fahrzeugrouten', colors: [COLORS.sprinterRoute, COLORS.kleinLkwRoute],  subLabels: ['Sprinter','Klein-LKW'], line: true, step: 4 },
 ]
 
-const VEHICLE_COLORS = [COLORS.sprinterRoute, COLORS.lkwRoute, '#f59e0b','#8b5cf6','#06b6d4','#10b981']
+const FALLBACK_COLORS = ['#f59e0b', '#8b5cf6', '#06b6d4', '#10b981']
+const vehColor = (name: string, i: number) => COLOR_BY_TYPE[name] ?? FALLBACK_COLORS[i % FALLBACK_COLORS.length]
 
 export function LayerToggle({ visibleLayers, pipelineStatus, onToggle, vehicleTypes, vehicleTypeFilter, onToggleVehicle }: Props) {
   const avail = (l: LayerDef) => l.always || (l.step !== undefined && pipelineStatus[l.step]?.status === 'done')
@@ -90,7 +93,7 @@ export function LayerToggle({ visibleLayers, pipelineStatus, onToggle, vehicleTy
               {isRoutes && on && routesDone && vehicleTypes.length > 0 && (
                 <div className="ml-6 mt-0.5 space-y-0.5">
                   {vehicleTypes.map((vt, i) => {
-                    const color  = VEHICLE_COLORS[i % VEHICLE_COLORS.length]
+                    const color  = vehColor(vt, i)
                     const active = vehicleTypeFilter.size === 0 || vehicleTypeFilter.has(vt)
                     return (
                       <label key={vt} className="flex items-center gap-1.5 py-0.5 px-1 rounded cursor-pointer hover:bg-slate-800/60">

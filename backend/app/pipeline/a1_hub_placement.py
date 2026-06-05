@@ -10,7 +10,7 @@ import logging
 import numpy as np
 
 from app.config import settings
-from app.db.models import Hub, Pharmacy
+from app.db.models import Hub, Pharmacy, SystemConfig
 
 logger = logging.getLogger(__name__)
 
@@ -86,6 +86,15 @@ def _greedy_pmedian(
 
 
 def run_hub_placement(pharmacies: list[Pharmacy], db) -> None:
+    # Configurable hub capacities (goods units) + demand estimate proxy
+    sys_raw = {c.key: c.value for c in db.query(SystemConfig).all()}
+    vz_capacity   = int(float(sys_raw.get("vz_capacity",  "320")))
+    mvz_capacity  = int(float(sys_raw.get("mvz_capacity", "90")))
+    demand_est    = float(sys_raw.get("default_demand_est", "3"))
+
+    def est_demand(p) -> float:
+        return float(p.demand) if p.demand else demand_est
+
     hq = (settings.hq_lat, settings.hq_lon)
     pharm_coords = [(p.lat, p.lon) for p in pharmacies]
     all_coords = [hq] + pharm_coords
@@ -121,16 +130,17 @@ def run_hub_placement(pharmacies: list[Pharmacy], db) -> None:
         hq_idx=hq_idx,
     )
 
-    # Persist hubs
+    # Persist hubs (with configurable warehouse capacity per type)
     db.query(Hub).delete()
     db.commit()
-    db.add(Hub(name=settings.hq_name, hub_type="HQ", lat=hq[0], lon=hq[1]))
+    db.add(Hub(name=settings.hq_name, hub_type="HQ", lat=hq[0], lon=hq[1],
+               capacity=vz_capacity * max(1, len(vz_indices))))
 
     vz_list: list[tuple[str, float, float]] = []
     for i, vidx in enumerate(vz_indices, 1):
         lat, lon = all_coords[vidx]
         name = f"VZ_{i}"
-        db.add(Hub(name=name, hub_type="VZ", lat=round(lat, 6), lon=round(lon, 6)))
+        db.add(Hub(name=name, hub_type="VZ", lat=round(lat, 6), lon=round(lon, 6), capacity=vz_capacity))
         vz_list.append((name, lat, lon))
         logger.info(f"  {name} → ({lat:.4f}, {lon:.4f})")
 
@@ -138,7 +148,7 @@ def run_hub_placement(pharmacies: list[Pharmacy], db) -> None:
     for i, midx in enumerate(mini_vz_indices, 1):
         lat, lon = all_coords[midx]
         name = f"mVZ_{i}"
-        db.add(Hub(name=name, hub_type="mVZ", lat=round(lat, 6), lon=round(lon, 6)))
+        db.add(Hub(name=name, hub_type="mVZ", lat=round(lat, 6), lon=round(lon, 6), capacity=mvz_capacity))
         mini_list.append((name, lat, lon))
         logger.info(f"  {name} → ({lat:.4f}, {lon:.4f})")
 
@@ -151,19 +161,56 @@ def run_hub_placement(pharmacies: list[Pharmacy], db) -> None:
     db.commit()
     logger.info(f"[Step 1] mVZ parent assignments written")
 
-    # Assign pharmacies by haversine
-    assigned_vz = assigned_mini = 0
-    for p in pharmacies:
-        best_vz = min(vz_list, key=lambda t: _hav(p.lat, p.lon, t[1], t[2]))
-        dist_to_best_vz = _hav(p.lat, p.lon, best_vz[1], best_vz[2])
+    # ── Capacity-aware assignment (haversine + warehouse limits) ─────────────
+    # Each hub holds at most `capacity` goods units. Pharmacies are assigned to
+    # their nearest eligible hub that still has room; if full, they overflow to
+    # the next-nearest hub with capacity. Closer pharmacies get priority.
+    load: dict[str, float] = {name: 0.0 for name, _, _ in vz_list + mini_list}
+    cap = {name: vz_capacity for name, _, _ in vz_list}
+    cap.update({name: mvz_capacity for name, _, _ in mini_list})
 
-        if dist_to_best_vz <= VZ_HARD_RADIUS_KM:
-            p.hub_name = best_vz[0]
+    # Sort pharmacies by distance to their nearest hub (closest first → priority)
+    def nearest_dist(p):
+        return min(_hav(p.lat, p.lon, t[1], t[2]) for t in vz_list + mini_list)
+    order = sorted(pharmacies, key=nearest_dist)
+
+    assigned_vz = assigned_mini = overflow = 0
+    for p in order:
+        d = est_demand(p)
+        # Preference order: VZs within hard radius first (by distance), then all mVZs, then any hub
+        vz_within = sorted(
+            [(name, _hav(p.lat, p.lon, la, lo)) for name, la, lo in vz_list],
+            key=lambda x: x[1],
+        )
+        mvz_sorted = sorted(
+            [(name, _hav(p.lat, p.lon, la, lo)) for name, la, lo in mini_list],
+            key=lambda x: x[1],
+        )
+        candidates = (
+            [(n, dd) for n, dd in vz_within if dd <= VZ_HARD_RADIUS_KM]
+            + mvz_sorted
+            + vz_within  # VZ as last resort beyond radius
+        )
+
+        chosen = None
+        for name, _dd in candidates:
+            if load[name] + d <= cap[name]:
+                chosen = name
+                break
+        if chosen is None:
+            # All eligible hubs full → assign to overall nearest (over capacity)
+            chosen = candidates[0][0]
+            overflow += 1
+
+        p.hub_name = chosen
+        load[chosen] += d
+        if chosen.startswith("VZ"):
             assigned_vz += 1
         else:
-            best_mini = min(mini_list, key=lambda t: _hav(p.lat, p.lon, t[1], t[2]))
-            p.hub_name = best_mini[0]
             assigned_mini += 1
 
     db.commit()
-    logger.info(f"[Step 1] Done — {assigned_vz} → VZ direct, {assigned_mini} → via mVZ")
+    logger.info(
+        f"[Step 1] Done — {assigned_vz} → VZ, {assigned_mini} → mVZ, "
+        f"{overflow} over-capacity overflow assignments"
+    )
