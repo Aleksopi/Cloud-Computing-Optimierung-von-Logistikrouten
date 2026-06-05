@@ -2,29 +2,112 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ── Base reset ──────────────────────────────────────────────────────────── */
 html, body, #root {
   height: 100%;
   margin: 0;
   padding: 0;
+  font-family: 'Inter', 'SF Pro Display', -apple-system, BlinkMacSystemFont,
+               'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
 }
 
-.maplibregl-canvas {
-  outline: none;
+/* ── Custom scrollbar ────────────────────────────────────────────────────── */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: #0f172a; }
+::-webkit-scrollbar-thumb { background: #334155; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #475569; }
+
+/* ── Map base ────────────────────────────────────────────────────────────── */
+.maplibregl-canvas { outline: none; }
+.maplibregl-ctrl-group {
+  background: #1e293b !important;
+  border: 1px solid #334155 !important;
+  border-radius: 8px !important;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.4) !important;
+  overflow: hidden;
+}
+.maplibregl-ctrl-group button {
+  background: #1e293b !important;
+  color: #94a3b8 !important;
+  border-bottom: 1px solid #334155 !important;
+  width: 32px !important;
+  height: 32px !important;
+}
+.maplibregl-ctrl-group button:hover { background: #334155 !important; color: #f1f5f9 !important; }
+.maplibregl-ctrl-group button:last-child { border-bottom: none !important; }
+.maplibregl-ctrl-attrib {
+  background: rgba(15,23,42,0.85) !important;
+  color: #64748b !important;
+  border-radius: 4px !important;
+  font-size: 9px !important;
+}
+.maplibregl-ctrl-attrib a { color: #94a3b8 !important; }
+.maplibregl-ctrl-scale {
+  background: rgba(15,23,42,0.8) !important;
+  border-color: #475569 !important;
+  color: #94a3b8 !important;
+  font-size: 10px !important;
+  padding: 1px 4px !important;
+  border-radius: 4px !important;
 }
 
-/* Hover tooltip */
+/* ── Map tooltip ─────────────────────────────────────────────────────────── */
 .map-tooltip .maplibregl-popup-content {
-  background: #ffffff;
-  border-radius: 8px;
-  padding: 8px 12px;
-  box-shadow: 0 4px 16px rgba(0,0,0,0.18);
+  background: #1e293b;
+  border: 1px solid #334155;
+  border-radius: 10px;
+  padding: 10px 14px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.5);
   font-family: inherit;
   pointer-events: none;
+  color: #e2e8f0;
+  font-size: 12px;
+  line-height: 1.6;
+  min-width: 160px;
 }
-.map-tooltip .maplibregl-popup-tip {
-  border-top-color: #ffffff;
+.map-tooltip .maplibregl-popup-tip { border-top-color: #1e293b; }
+.map-tooltip strong { color: #f1f5f9; font-weight: 600; }
+
+/* ── Loading bar animation ───────────────────────────────────────────────── */
+@keyframes loading-bar {
+  0%   { transform: translateX(-100%) }
+  50%  { transform: translateX(0%) }
+  100% { transform: translateX(100%) }
 }
-.map-tooltip strong {
-  color: #0f172a;
-  font-weight: 600;
+.animate-loading-bar {
+  animation: loading-bar 1.5s ease-in-out infinite;
+}
+
+/* ── Shimmer skeleton ────────────────────────────────────────────────────── */
+@keyframes shimmer {
+  0%   { background-position: -200% 0 }
+  100% { background-position: 200% 0 }
+}
+.skeleton {
+  background: linear-gradient(90deg, #1e293b 25%, #334155 50%, #1e293b 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+  border-radius: 4px;
+}
+
+/* ── Status badge ────────────────────────────────────────────────────────── */
+.status-dot {
+  width: 7px; height: 7px; border-radius: 50%; display: inline-block;
+}
+.status-dot.idle    { background: #475569; }
+.status-dot.running { background: #f59e0b; box-shadow: 0 0 6px #f59e0b; animation: pulse 1.5s infinite; }
+.status-dot.done    { background: #22c55e; }
+.status-dot.error   { background: #ef4444; }
+
+@keyframes pulse {
+  0%, 100% { opacity: 1 }
+  50%       { opacity: 0.4 }
+}
+
+/* ── Stat card hover ─────────────────────────────────────────────────────── */
+.stat-card {
+  transition: border-color 0.15s, transform 0.15s;
+}
+.stat-card:hover {
+  transform: translateY(-1px);
 }

@@ -5,10 +5,36 @@ import os
 from sqlalchemy import text
 
 from app.config import settings
-from app.db.models import Base, Pharmacy, PipelineRun, PopulationCell
+from app.db.models import Base, Pharmacy, PipelineRun, PopulationCell, VehicleFleetConfig, SystemConfig
 from app.db.session import SessionLocal, engine
 
 logger = logging.getLogger(__name__)
+
+# ── Default vehicle fleet ──────────────────────────────────────────────────────
+DEFAULT_VEHICLES = [
+    dict(name="Sprinter", vehicle_class="delivery", capacity=15, range_km=350.0,
+         cost_per_km=0.38, co2_g_per_km=185.0, speed_kmh=65.0, driver_chf_h=45.0,
+         service_min=20, max_per_hub=10, restock_threshold=5, sort_order=1, enabled=True),
+    dict(name="LKW", vehicle_class="delivery", capacity=200, range_km=500.0,
+         cost_per_km=1.20, co2_g_per_km=280.0, speed_kmh=75.0, driver_chf_h=55.0,
+         service_min=35, max_per_hub=5, restock_threshold=20, sort_order=2, enabled=True),
+    dict(name="Backbone", vehicle_class="backbone", capacity=None, range_km=1000.0,
+         cost_per_km=2.50, co2_g_per_km=450.0, speed_kmh=85.0, driver_chf_h=None,
+         service_min=None, max_per_hub=None, restock_threshold=None, sort_order=0, enabled=True),
+]
+
+# ── Default system configuration ──────────────────────────────────────────────
+DEFAULT_SYSTEM_CONFIG = [
+    ("population_per_item", "12000",  "Bevölkerung pro Warenartikel",     "Warenbedarf-Berechnung (Step 3)"),
+    ("shift_hours",         "8.0",    "Schichtlänge (Stunden)",            "Maximale Fahrzeit pro Schicht"),
+    ("opt_weight_cost",     "0.40",   "Optimierungsgewicht: Kosten",       "Anteil Fahrtkosten am Score (0–1)"),
+    ("opt_weight_time",     "0.35",   "Optimierungsgewicht: Zeit",         "Anteil Fahrzeit am Score (0–1)"),
+    ("opt_weight_env",      "0.25",   "Optimierungsgewicht: Umwelt",       "Anteil CO₂ am Score (0–1)"),
+    ("traffic_factor",      "1.0",    "Verkehrsfaktor",                    "1.0 = Freifluss; >1.0 = Stau"),
+    ("co2_shadow_chf",      "0.12",   "CO₂-Schattenpreis (CHF/kg)",        "Monetarisierung der Umweltkosten"),
+    ("max_catchment_km",    "10.0",   "Max. Einzugsgebiet-Radius (km)",    "Für Warenbedarf-Berechnung"),
+    ("vz_hard_radius_km",   "45.0",   "VZ-Zuweisungsradius (km)",          "Apotheke → direkt zu VZ wenn ≤ Radius"),
+]
 
 
 def init_db():
@@ -26,6 +52,12 @@ def init_db():
 
         if db.query(PopulationCell).count() == 0:
             _import_population(db)
+
+        if db.query(VehicleFleetConfig).count() == 0:
+            _seed_vehicles(db)
+
+        if db.query(SystemConfig).count() == 0:
+            _seed_system_config(db)
     finally:
         db.close()
 
@@ -44,6 +76,20 @@ def _migrate_columns():
         logger.info("[init_db] Column migrations applied")
     except Exception as e:
         logger.warning(f"[init_db] Migration warning (non-fatal): {e}")
+
+
+def _seed_vehicles(db):
+    for v in DEFAULT_VEHICLES:
+        db.add(VehicleFleetConfig(**v))
+    db.commit()
+    logger.info(f"[init_db] Seeded {len(DEFAULT_VEHICLES)} vehicle configs")
+
+
+def _seed_system_config(db):
+    for key, value, label, description in DEFAULT_SYSTEM_CONFIG:
+        db.add(SystemConfig(key=key, value=value, label=label, description=description))
+    db.commit()
+    logger.info(f"[init_db] Seeded {len(DEFAULT_SYSTEM_CONFIG)} system config entries")
 
 
 def _import_pharmacies(db):
@@ -99,7 +145,6 @@ def _import_population(db):
             if feat["geometry"]["type"] == "Point":
                 lon, lat = coords[0], coords[1]
             else:
-                # Polygon: use provided centroid or bbox center
                 continue
         cells.append(PopulationCell(lat=float(lat), lon=float(lon), population=pop))
 

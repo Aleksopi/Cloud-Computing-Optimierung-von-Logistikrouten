@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Float, DateTime, Text, JSON, ForeignKey
+from sqlalchemy import Boolean, Column, Integer, String, Float, DateTime, Text, JSON, ForeignKey
 from sqlalchemy.orm import DeclarativeBase
 
 
@@ -71,3 +71,31 @@ class PopulationCell(Base):
     lat = Column(Float, nullable=False)
     lon = Column(Float, nullable=False)
     population = Column(Integer, nullable=False)
+
+
+class VehicleFleetConfig(Base):
+    """Configurable vehicle fleet — read by Step 4 at runtime."""
+    __tablename__ = "vehicle_fleet_configs"
+    id                = Column(Integer, primary_key=True)
+    name              = Column(String, nullable=False)         # display name & vehicle_type key
+    vehicle_class     = Column(String, nullable=False)         # "delivery" or "backbone"
+    capacity          = Column(Integer, nullable=True)         # items per load (None = unlimited)
+    range_km          = Column(Float, nullable=False)
+    cost_per_km       = Column(Float, nullable=False)
+    co2_g_per_km      = Column(Float, nullable=False)
+    speed_kmh         = Column(Float, nullable=False)
+    driver_chf_h      = Column(Float, nullable=True)
+    service_min       = Column(Integer, nullable=True)
+    max_per_hub       = Column(Integer, nullable=True)
+    restock_threshold = Column(Integer, nullable=True)         # restock if items_loaded < this
+    sort_order        = Column(Integer, default=0)             # delivery priority sequence
+    enabled           = Column(Boolean, default=True)
+
+
+class SystemConfig(Base):
+    """Key-value store for runtime-configurable system parameters."""
+    __tablename__ = "system_config"
+    key         = Column(String, primary_key=True)
+    value       = Column(String, nullable=False)
+    label       = Column(String, nullable=True)
+    description = Column(String, nullable=True)
