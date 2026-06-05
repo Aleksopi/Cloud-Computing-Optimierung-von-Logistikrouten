@@ -11,12 +11,10 @@ import math
 
 import numpy as np
 
-from app.db.models import Pharmacy, PopulationCell
+from app.db.models import Pharmacy, PopulationCell, SystemConfig
 
 logger = logging.getLogger(__name__)
 
-MAX_CATCHMENT_KM = 10.0
-POPULATION_PER_ITEM = 12_000
 BATCH_SIZE = 40  # pharmacies per batch to stay memory-friendly
 
 
@@ -34,13 +32,21 @@ def _hav_matrix(p_lats: np.ndarray, p_lons: np.ndarray, c_lats: np.ndarray, c_lo
 
 
 def run_demand(db) -> None:
+    # Read configurable parameters from DB
+    sys_raw = {c.key: c.value for c in db.query(SystemConfig).all()}
+    MAX_CATCHMENT_KM    = float(sys_raw.get("max_catchment_km",    "10.0"))
+    POPULATION_PER_ITEM = int(sys_raw.get("population_per_item", "12000"))
+
     pharmacies = db.query(Pharmacy).all()
     cells = db.query(PopulationCell).all()
 
     if not cells:
         raise RuntimeError("No population cells in DB — check that population.geojson was imported")
 
-    logger.info(f"[Step 3] {len(pharmacies)} pharmacies, {len(cells)} population cells")
+    logger.info(
+        f"[Step 3] {len(pharmacies)} pharmacies, {len(cells)} cells | "
+        f"max_catchment={MAX_CATCHMENT_KM} km, pop_per_item={POPULATION_PER_ITEM}"
+    )
 
     p_lats = np.array([p.lat for p in pharmacies])
     p_lons = np.array([p.lon for p in pharmacies])

@@ -26,7 +26,37 @@ export interface Summary {
   lkw_routes: number
 }
 
-// ── Analytics Dashboard Types ─────────────────────────────────────────────────
+// ── Vehicle Fleet Config ──────────────────────────────────────────────────────
+
+export interface VehicleConfig {
+  id: number
+  name: string
+  vehicle_class: 'delivery' | 'backbone'
+  capacity: number | null
+  range_km: number
+  cost_per_km: number
+  co2_g_per_km: number
+  speed_kmh: number
+  driver_chf_h: number | null
+  service_min: number | null
+  max_per_hub: number | null
+  restock_threshold: number | null
+  sort_order: number
+  enabled: boolean
+}
+
+export interface VehicleConfigCreate extends Omit<VehicleConfig, 'id'> {}
+
+// ── System Config ─────────────────────────────────────────────────────────────
+
+export interface SystemConfigEntry {
+  key: string
+  value: string
+  label: string | null
+  description: string | null
+}
+
+// ── Analytics Dashboard ───────────────────────────────────────────────────────
 
 export interface FleetStats {
   count: number
@@ -59,17 +89,6 @@ export interface VzStats {
   mvz: MvzStats[]
 }
 
-export interface VehicleSpecEntry {
-  capacity?: number
-  range_km?: number
-  cost_per_km: number
-  co2_g_per_km: number
-  speed_kmh: number
-  driver_chf_h?: number
-  service_min?: number
-  label: string
-}
-
 export interface FullSummary {
   overview: {
     total_cost_chf: number
@@ -80,16 +99,12 @@ export interface FullSummary {
     pharmacies_assigned: number
     hubs_total: number
   }
+  fleet_by_type: Record<string, FleetStats>
   fleet: {
-    evan: FleetStats
-    lkw: FleetStats
+    last_mile: FleetStats
     backbone: FleetStats
   }
-  vehicle_specs: {
-    evan: VehicleSpecEntry
-    lkw: VehicleSpecEntry
-    backbone: Omit<VehicleSpecEntry, 'capacity' | 'range_km' | 'driver_chf_h' | 'service_min'>
-  }
+  vehicle_specs: VehicleConfig[]
   optimization: {
     weights: { cost: number; time: number; environment: number }
     traffic_factor: number
