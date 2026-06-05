@@ -80,6 +80,19 @@ export interface SystemConfigEntry {
   description: string | null
 }
 
+// ── Live Traffic ──────────────────────────────────────────────────────────────
+
+export interface TrafficInfo {
+  enabled:            boolean
+  peak_intensity:     number
+  static_factor:      number   // factor applied when live traffic is OFF
+  effective_factor:   number   // factor Step 4 actually applies
+  current_congestion: number   // live "right now" multiplier
+  shift_start:        number
+  shift_hours:        number
+  profile:            number[] // 24 hourly congestion multipliers
+}
+
 // ── Analytics Dashboard ───────────────────────────────────────────────────────
 
 export interface FleetStats {
@@ -158,9 +171,15 @@ export interface FullSummary {
   vehicle_specs: VehicleConfig[]
   optimization: {
     weights: { cost: number; time: number; environment: number }
-    traffic_factor: number
+    traffic_factor: number               // factor actually applied by Step 4
+    static_traffic_factor: number
+    live_traffic_enabled: boolean
+    traffic_peak_intensity: number
+    effective_traffic_factor: number
+    traffic_profile: number[] | null     // 24h curve when live traffic was on
     co2_shadow_chf_per_kg: number
     shift_hours: number
+    shift_start: number
   }
   supply_chain: {
     hq_name: string | null

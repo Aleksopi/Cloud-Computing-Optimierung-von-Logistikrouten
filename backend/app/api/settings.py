@@ -9,6 +9,7 @@ from pydantic import BaseModel
 
 from app.db.models import SystemConfig, VehicleFleetConfig
 from app.db.session import SessionLocal
+from app.services.traffic import current_congestion, effective_factor, hourly_profile
 
 router = APIRouter()
 
@@ -36,6 +37,12 @@ class VehicleBody(BaseModel):
 class SystemConfigBody(BaseModel):
     """Bulk-update: key → value mapping (string values)."""
     updates: dict[str, str]
+
+
+class TrafficBody(BaseModel):
+    """Toggle live traffic and (optionally) tune its peak intensity."""
+    enabled: bool
+    peak_intensity: float | None = None
 
 
 # ── Vehicle endpoints ─────────────────────────────────────────────────────────
@@ -121,7 +128,66 @@ def update_system_config(body: SystemConfigBody):
         db.close()
 
 
+# ── Live-traffic endpoints ────────────────────────────────────────────────────
+
+@router.get("/traffic")
+def get_traffic():
+    db = SessionLocal()
+    try:
+        return _traffic_payload({c.key: c.value for c in db.query(SystemConfig).all()})
+    finally:
+        db.close()
+
+
+@router.put("/traffic")
+def update_traffic(body: TrafficBody):
+    db = SessionLocal()
+    try:
+        _upsert(db, "live_traffic_enabled", "1" if body.enabled else "0")
+        if body.peak_intensity is not None:
+            _upsert(db, "traffic_peak_intensity", str(round(max(0.0, body.peak_intensity), 2)))
+        db.commit()
+        return _traffic_payload({c.key: c.value for c in db.query(SystemConfig).all()})
+    finally:
+        db.close()
+
+
 # ── Helpers ───────────────────────────────────────────────────────────────────
+
+def _upsert(db, key: str, value: str) -> None:
+    row = db.query(SystemConfig).filter(SystemConfig.key == key).first()
+    if row:
+        row.value = value
+    else:
+        db.add(SystemConfig(key=key, value=value))
+
+
+def _traffic_payload(raw: dict[str, str]) -> dict:
+    def _f(key: str, default: float) -> float:
+        try:
+            return float(raw.get(key, default))
+        except (TypeError, ValueError):
+            return default
+
+    enabled       = _f("live_traffic_enabled", 0.0) >= 0.5
+    peak          = _f("traffic_peak_intensity", 1.0)
+    static_factor = _f("traffic_factor", 1.0)
+    shift_start   = _f("shift_start", 8.0)
+    shift_hours   = _f("shift_hours", 8.0)
+    return {
+        "enabled":            enabled,
+        "peak_intensity":     round(peak, 2),
+        "static_factor":      round(static_factor, 3),
+        "effective_factor":   effective_factor(
+            enabled=enabled, static_factor=static_factor,
+            shift_start=shift_start, shift_hours=shift_hours, peak_intensity=peak,
+        ),
+        "current_congestion": current_congestion(peak),
+        "shift_start":        shift_start,
+        "shift_hours":        shift_hours,
+        "profile":            hourly_profile(peak),
+    }
+
 
 def _vehicle_dict(v: VehicleFleetConfig) -> dict:
     return {

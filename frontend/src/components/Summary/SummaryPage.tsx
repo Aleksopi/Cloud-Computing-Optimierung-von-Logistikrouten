@@ -119,6 +119,9 @@ function OverviewTab({ data, co2Saved }: { data: FullSummary; co2Saved: number }
                  sub={`Ø ${fmt(metrics.avg_stops_per_route)} Stops · ${fmt(metrics.total_driver_hours)} h`} />
       </div>
 
+      {/* Traffic & optimisation context */}
+      <TrafficContextCard optimization={optimization} />
+
       {/* Fleet summary + utilization */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <Card title="Flotteneinsatz">
@@ -465,6 +468,80 @@ function KpiCard({ label, main, sub, accent }: { label: string; main: string; su
       <p className="text-xs text-slate-500 mb-1">{label}</p>
       <p className={`text-xl font-bold ${a.text}`}>{main}</p>
       <p className="text-xs text-slate-600 mt-1">{sub}</p>
+    </div>
+  )
+}
+
+const congColor = (f: number) => (f >= 1.35 ? '#f87171' : f >= 1.12 ? '#fbbf24' : '#34d399')
+const asDelay   = (f: number) => `${f >= 1 ? '+' : '−'}${Math.round(Math.abs(f - 1) * 100)} %`
+const fmtHour   = (h: number) => {
+  const hrs = Math.floor(h), mins = Math.round((h - hrs) * 60)
+  return `${String(hrs).padStart(2, '0')}:${String(mins).padStart(2, '0')}`
+}
+
+function TrafficContextCard({ optimization }: { optimization: FullSummary['optimization'] }) {
+  const on       = optimization.live_traffic_enabled
+  const factor   = optimization.effective_traffic_factor ?? optimization.traffic_factor
+  const profile  = optimization.traffic_profile
+  const shiftEnd = optimization.shift_start + optimization.shift_hours
+
+  return (
+    <div className={`rounded-xl border overflow-hidden ${on ? 'border-amber-700/40 bg-amber-950/10' : 'border-slate-700/60 bg-slate-900/60'}`}>
+      <div className="flex items-center gap-2.5 px-4 py-3 border-b border-slate-700/40 bg-slate-800/30">
+        <span className={`w-2 h-2 rounded-full ${on ? 'bg-amber-400 animate-pulse' : 'bg-slate-600'}`} />
+        <span className="text-sm font-semibold text-slate-200">Verkehr &amp; Optimierung</span>
+        <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+          on ? 'bg-amber-900/40 text-amber-300 border border-amber-700/40' : 'bg-slate-800 text-slate-500 border border-slate-700/50'}`}>
+          {on ? 'Live-Verkehr aktiv' : 'Statischer Faktor'}
+        </span>
+      </div>
+
+      <div className="p-4 grid grid-cols-2 md:grid-cols-4 gap-4 items-start">
+        <Metric label="Angewandter Verkehrsfaktor" value={`×${factor.toFixed(2)}`}
+                color={on ? congColor(factor) : '#94a3b8'} hint={`${asDelay(factor)} Fahrzeit ggü. Freifluss`} />
+        <Metric label="Lieferfenster" value={`${fmtHour(optimization.shift_start)}–${fmtHour(shiftEnd)}`}
+                color="#cbd5e1" hint={`${optimization.shift_hours} h Schicht`} />
+        <Metric label="Stau-Intensität" value={on ? `${optimization.traffic_peak_intensity.toFixed(2)}×` : '—'}
+                color="#cbd5e1" hint={on ? 'Modell-Skalierung' : 'inaktiv'} />
+        <Metric label="CO₂-Schattenpreis" value={`CHF ${optimization.co2_shadow_chf_per_kg.toFixed(2)}`}
+                color="#cbd5e1" hint="pro kg CO₂" />
+      </div>
+
+      {on && profile && profile.length === 24 && (
+        <div className="px-4 pb-4">
+          <div className="flex items-center justify-between mb-1.5">
+            <span className="text-xs text-slate-500">Tagesverlauf — Stau-Modell</span>
+            <span className="text-[10px] text-slate-600">Lieferfenster hervorgehoben</span>
+          </div>
+          <div className="flex items-end gap-[2px] h-14">
+            {profile.map((f, h) => {
+              const inShift = h + 1 > optimization.shift_start && h < shiftEnd
+              const max = Math.max(1.05, ...profile)
+              return (
+                <div key={h} className="flex-1 flex flex-col justify-end group relative" style={{ height: '100%' }}>
+                  <div className="w-full rounded-t" style={{
+                    height: `${Math.max(4, ((f - 1) / (max - 1 || 1)) * 100)}%`,
+                    backgroundColor: congColor(f), opacity: inShift ? 1 : 0.3,
+                  }} />
+                  <div className="absolute -top-6 left-1/2 -translate-x-1/2 hidden group-hover:block bg-slate-950 border border-slate-700 rounded px-1.5 py-0.5 text-[10px] text-slate-200 whitespace-nowrap z-10">
+                    {String(h).padStart(2, '0')}:00 · ×{f.toFixed(2)}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function Metric({ label, value, color, hint }: { label: string; value: string; color: string; hint?: string }) {
+  return (
+    <div>
+      <p className="text-[10px] uppercase tracking-wide text-slate-500 mb-1">{label}</p>
+      <p className="text-lg font-bold" style={{ color }}>{value}</p>
+      {hint && <p className="text-[10px] text-slate-600 mt-0.5">{hint}</p>}
     </div>
   )
 }

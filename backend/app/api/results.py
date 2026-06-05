@@ -7,6 +7,7 @@ from sqlalchemy import or_
 
 from app.db.models import Assignment, Hub, Pharmacy, SystemConfig, VehicleFleetConfig, VehicleRoute
 from app.db.session import SessionLocal
+from app.services.traffic import effective_factor, hourly_profile
 
 router = APIRouter()
 
@@ -18,6 +19,41 @@ def _fmt_hour(h: float | None) -> str:
     hrs  = int(h)
     mins = round((h - hrs) * 60)
     return f"{hrs:02d}:{mins:02d}"
+
+
+def _optimization_block(sys_raw: dict[str, str]) -> dict:
+    """Optimisation weights + the live-traffic context used by Step 4."""
+    def _f(key: str, default: float) -> float:
+        try:
+            return float(sys_raw.get(key, default))
+        except (TypeError, ValueError):
+            return default
+
+    live_on     = _f("live_traffic_enabled", 0.0) >= 0.5
+    peak        = _f("traffic_peak_intensity", 1.0)
+    static_tf   = _f("traffic_factor", 1.0)
+    shift_start = _f("shift_start", 8.0)
+    shift_hours = _f("shift_hours", 8.0)
+    eff = effective_factor(
+        enabled=live_on, static_factor=static_tf,
+        shift_start=shift_start, shift_hours=shift_hours, peak_intensity=peak,
+    )
+    return {
+        "weights": {
+            "cost":        _f("opt_weight_cost", 0.40),
+            "time":        _f("opt_weight_time", 0.35),
+            "environment": _f("opt_weight_env",  0.25),
+        },
+        "traffic_factor":          eff,                 # actually applied factor
+        "static_traffic_factor":   round(static_tf, 3),
+        "live_traffic_enabled":    live_on,
+        "traffic_peak_intensity":  round(peak, 2),
+        "effective_traffic_factor": eff,
+        "traffic_profile":         hourly_profile(peak) if live_on else None,
+        "co2_shadow_chf_per_kg":   _f("co2_shadow_chf", 0.12),
+        "shift_hours":             shift_hours,
+        "shift_start":             shift_start,
+    }
 
 
 @router.get("/pharmacies")
@@ -392,16 +428,7 @@ def get_full_summary():
                 }
                 for v in vehicles
             ],
-            "optimization": {
-                "weights": {
-                    "cost":        float(sys_raw.get("opt_weight_cost", "0.40")),
-                    "time":        float(sys_raw.get("opt_weight_time", "0.35")),
-                    "environment": float(sys_raw.get("opt_weight_env",  "0.25")),
-                },
-                "traffic_factor":        float(sys_raw.get("traffic_factor",  "1.0")),
-                "co2_shadow_chf_per_kg": float(sys_raw.get("co2_shadow_chf",  "0.12")),
-                "shift_hours":           float(sys_raw.get("shift_hours",      "8.0")),
-            },
+            "optimization": _optimization_block(sys_raw),
             "supply_chain": {
                 "hq_name":        hq.name if hq else None,
                 "vz_count":       len(vz_list),

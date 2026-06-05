@@ -1,6 +1,6 @@
 import type {
   FullSummary, PipelineStatus, Summary,
-  VehicleConfig, VehicleConfigCreate, SystemConfigEntry,
+  VehicleConfig, VehicleConfigCreate, SystemConfigEntry, TrafficInfo,
 } from '../types'
 
 async function json<T>(path: string, init?: RequestInit): Promise<T> {
@@ -51,4 +51,9 @@ export const api = {
   getSystemConfig:    () => json<SystemConfigEntry[]>('/api/settings/system'),
   updateSystemConfig: (updates: Record<string, string>) =>
     json<SystemConfigEntry[]>('/api/settings/system', jsonPut({ updates })),
+
+  // Settings — live traffic
+  getTraffic: () => json<TrafficInfo>('/api/settings/traffic'),
+  setTraffic: (enabled: boolean, peak_intensity?: number) =>
+    json<TrafficInfo>('/api/settings/traffic', jsonPut({ enabled, peak_intensity })),
 }

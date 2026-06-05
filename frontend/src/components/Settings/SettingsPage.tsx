@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { api } from '../../api/client'
-import type { VehicleConfig, VehicleConfigCreate, SystemConfigEntry } from '../../types'
+import type { VehicleConfig, VehicleConfigCreate, SystemConfigEntry, TrafficInfo } from '../../types'
 
 export function SettingsPage() {
   const [vehicles,  setVehicles]  = useState<VehicleConfig[]>([])
@@ -226,6 +226,9 @@ export function SettingsPage() {
           </div>
         </section>
 
+        {/* ── Live traffic ─────────────────────────────────────────────── */}
+        <TrafficSection />
+
         {/* ── Opening hours ────────────────────────────────────────────── */}
         <section className="bg-slate-900/60 border border-slate-700/60 rounded-xl overflow-hidden">
           <div className="px-5 py-4 border-b border-slate-700/60 bg-slate-800/40">
@@ -412,4 +415,174 @@ function SysField({ conf, value, onChange }: {
                         focus:outline-none focus:border-blue-500 transition-colors" />
     </div>
   )
+}
+
+/* ── Live-traffic settings ───────────────────────────────────────────────────── */
+
+const congColor = (f: number) => (f >= 1.35 ? '#f87171' : f >= 1.12 ? '#fbbf24' : '#34d399')
+const asDelay   = (f: number) => `${f >= 1 ? '+' : '−'}${Math.round(Math.abs(f - 1) * 100)} %`
+
+function TrafficSection() {
+  const [info,  setInfo]  = useState<TrafficInfo | null>(null)
+  const [peak,  setPeak]  = useState(1)
+  const [busy,  setBusy]  = useState(false)
+  const [err,   setErr]   = useState<string | null>(null)
+
+  const apply = useCallback((data: TrafficInfo) => { setInfo(data); setPeak(data.peak_intensity) }, [])
+
+  useEffect(() => {
+    let alive = true
+    const load = () => api.getTraffic().then(t => { if (alive) apply(t) }).catch(e => setErr(String(e)))
+    load()
+    const id = setInterval(() => api.getTraffic().then(t => { if (alive) setInfo(t) }).catch(() => {}), 60_000)
+    return () => { alive = false; clearInterval(id) }
+  }, [apply])
+
+  const save = async (enabled: boolean, peakIntensity: number) => {
+    setBusy(true); setErr(null)
+    try { apply(await api.setTraffic(enabled, peakIntensity)) }
+    catch (e) { setErr(e instanceof Error ? e.message : String(e)) }
+    finally { setBusy(false) }
+  }
+
+  if (!info) return null
+  const on   = info.enabled
+  const cong = info.current_congestion
+  const peakChanged = Math.abs(peak - info.peak_intensity) > 0.001
+
+  // Preview the daily curve at the slider's peak (model is linear in peak).
+  const base    = info.profile.map(f => (info.peak_intensity > 0.01 ? 1 + (f - 1) / info.peak_intensity : f))
+  const preview = base.map(b => 1 + (b - 1) * peak)
+  const shiftEnd = info.shift_start + info.shift_hours
+  const nowHour  = new Date().getHours() + new Date().getMinutes() / 60
+
+  return (
+    <section className="bg-slate-900/60 border border-slate-700/60 rounded-xl overflow-hidden">
+      <div className="flex items-center justify-between px-5 py-4 border-b border-slate-700/60 bg-slate-800/40">
+        <div className="flex items-center gap-2.5">
+          <span className={`w-2 h-2 rounded-full ${on ? 'bg-amber-400 animate-pulse' : 'bg-slate-600'}`} />
+          <div>
+            <h3 className="text-sm font-semibold text-slate-200">Live-Verkehr</h3>
+            <p className="text-xs text-slate-500 mt-0.5">
+              Tageszeitabhängiges Stau-Modell — skaliert die Fahrzeiten in der Routenoptimierung (Schritt 4)
+            </p>
+          </div>
+        </div>
+        {/* Switch */}
+        <button onClick={() => save(!on, peak)} disabled={busy} role="switch" aria-checked={on}
+          className={`relative flex-shrink-0 w-11 h-6 rounded-full transition-colors duration-200
+            ${on ? 'bg-amber-500' : 'bg-slate-600'} ${busy ? 'opacity-60' : 'hover:brightness-110'}`}>
+          <span className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform duration-200
+            ${on ? 'translate-x-5' : 'translate-x-0'}`} />
+        </button>
+      </div>
+
+      <div className="px-5 py-5 space-y-5">
+        {err && <div className="text-xs text-red-400 bg-red-950/40 border border-red-800/40 rounded-lg px-3 py-2">{err}</div>}
+
+        {/* Status tiles */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+          <Tile label="Status" value={on ? 'Aktiv' : 'Inaktiv'}
+                color={on ? '#fbbf24' : '#64748b'} hint={on ? 'Stau-Modell läuft' : 'Statischer Faktor'} />
+          <Tile label="Angewandter Faktor" value={`×${info.effective_factor.toFixed(2)}`}
+                color={on ? congColor(info.effective_factor) : '#94a3b8'}
+                hint={on ? `Schicht-Ø · ${asDelay(info.effective_factor)} Fahrzeit` : 'aus statischem Verkehrsfaktor'} />
+          <Tile label="Verkehr jetzt" value={`×${cong.toFixed(2)}`} color={congColor(cong)}
+                hint={`${asDelay(cong)} · ${new Date().toLocaleTimeString('de-CH', { hour: '2-digit', minute: '2-digit' })} Uhr`} live={on} />
+        </div>
+
+        {/* Peak intensity slider */}
+        <div className={on ? '' : 'opacity-50 pointer-events-none'}>
+          <div className="flex items-center justify-between mb-2">
+            <label className="text-xs font-medium text-slate-300">Stau-Intensität</label>
+            <span className="text-xs font-mono text-amber-200">{peak.toFixed(2)}×</span>
+          </div>
+          <input type="range" min={0} max={2} step={0.05} value={peak}
+                 onChange={e => setPeak(parseFloat(e.target.value))}
+                 className="w-full accent-amber-500" />
+          <div className="flex justify-between text-[10px] text-slate-600 mt-1">
+            <span>0 — kein Stau</span><span>1.0 — Standard</span><span>2.0 — extrem</span>
+          </div>
+          {peakChanged && (
+            <div className="flex justify-end mt-2">
+              <button onClick={() => save(on, peak)} disabled={busy}
+                      className="text-xs px-3 py-1.5 bg-amber-600 hover:bg-amber-500 text-white rounded-lg font-medium transition-colors">
+                {busy ? 'Übernehmen…' : 'Intensität übernehmen'}
+              </button>
+            </div>
+          )}
+        </div>
+
+        {/* Daily congestion curve */}
+        <div>
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-xs font-semibold text-slate-400">Tagesverlauf (Schweizer Pendlerprofil)</p>
+            <span className="text-[10px] text-slate-600">Lieferfenster {fmtH(info.shift_start)}–{fmtH(shiftEnd)} hervorgehoben</span>
+          </div>
+          <CongestionChart curve={preview} shiftStart={info.shift_start} shiftEnd={shiftEnd} nowHour={nowHour} />
+        </div>
+
+        <p className="text-xs text-slate-600 leading-relaxed">
+          Bei aktivem Live-Verkehr nutzt Schritt 4 den über das Lieferfenster gemittelten Stau-Faktor
+          statt des statischen Verkehrsfaktors. Höhere Fahrzeiten verschieben die Gewichtung im Score
+          hin zu schnelleren Routen. Änderungen wirken beim nächsten Lauf von Schritt 4.
+        </p>
+      </div>
+    </section>
+  )
+}
+
+function Tile({ label, value, color, hint, live }: {
+  label: string; value: string; color: string; hint?: string; live?: boolean
+}) {
+  return (
+    <div className="rounded-lg border border-slate-700/50 bg-slate-800/40 px-3 py-2.5">
+      <div className="flex items-center gap-1.5 mb-1">
+        <span className="text-[10px] uppercase tracking-wide text-slate-500">{label}</span>
+        {live && <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />}
+      </div>
+      <div className="text-lg font-bold" style={{ color }}>{value}</div>
+      {hint && <div className="text-[10px] text-slate-500 mt-0.5">{hint}</div>}
+    </div>
+  )
+}
+
+function CongestionChart({ curve, shiftStart, shiftEnd, nowHour }: {
+  curve: number[]; shiftStart: number; shiftEnd: number; nowHour: number
+}) {
+  const max = Math.max(1.05, ...curve)
+  return (
+    <div className="rounded-lg border border-slate-700/40 bg-slate-900/40 p-3">
+      <div className="flex items-end gap-[2px] h-24">
+        {curve.map((f, h) => {
+          const inShift = h + 1 > shiftStart && h < shiftEnd
+          const isNow   = Math.floor(nowHour) === h
+          const heightPct = ((f - 1) / (max - 1 || 1)) * 100
+          return (
+            <div key={h} className="flex-1 flex flex-col justify-end items-center group relative" style={{ height: '100%' }}>
+              <div className="w-full rounded-t transition-all"
+                   style={{
+                     height: `${Math.max(3, heightPct)}%`,
+                     backgroundColor: congColor(f),
+                     opacity: inShift ? 1 : 0.35,
+                     outline: isNow ? '1px solid #fff' : 'none',
+                   }} />
+              {/* tooltip */}
+              <div className="absolute -top-7 hidden group-hover:block bg-slate-950 border border-slate-700 rounded px-1.5 py-0.5 text-[10px] text-slate-200 whitespace-nowrap z-10">
+                {String(h).padStart(2, '0')}:00 · ×{f.toFixed(2)}
+              </div>
+            </div>
+          )
+        })}
+      </div>
+      <div className="flex justify-between text-[9px] text-slate-600 mt-1">
+        {[0, 6, 12, 18, 23].map(h => <span key={h}>{String(h).padStart(2, '0')}h</span>)}
+      </div>
+    </div>
+  )
+}
+
+function fmtH(h: number) {
+  const hrs = Math.floor(h), mins = Math.round((h - hrs) * 60)
+  return `${String(hrs).padStart(2, '0')}:${String(mins).padStart(2, '0')}`
 }

@@ -17,6 +17,7 @@ import requests as _http
 
 from app.config import settings
 from app.db.models import Assignment, Hub, Pharmacy, SystemConfig, VehicleFleetConfig, VehicleRoute
+from app.services.traffic import effective_factor
 
 logger = logging.getLogger(__name__)
 
@@ -183,18 +184,34 @@ def run_routes(db) -> None:
         [v for v in all_veh if v.can_backbone], key=lambda v: -(v.capacity or 0)))
 
     sys_raw = {c.key: float(c.value) for c in db.query(SystemConfig).all()}
+
+    # ── Live-traffic: derive the effective traffic factor ─────────────────────
+    # ON  → time-of-day congestion averaged over the delivery shift.
+    # OFF → the static configured `traffic_factor` (default 1.0 = free flow).
+    live_traffic = sys_raw.get("live_traffic_enabled", 0.0) >= 0.5
+    shift_start  = sys_raw.get("shift_start", 8.0)
+    shift_hours  = sys_raw.get("shift_hours", 8.0)
+    traffic_factor = effective_factor(
+        enabled=live_traffic,
+        static_factor=sys_raw.get("traffic_factor", 1.0),
+        shift_start=shift_start,
+        shift_hours=shift_hours,
+        peak_intensity=sys_raw.get("traffic_peak_intensity", 1.0),
+    )
+
     opt = {
-        "shift_hours":    sys_raw.get("shift_hours",     8.0),
-        "shift_start":    sys_raw.get("shift_start",     8.0),
+        "shift_hours":    shift_hours,
+        "shift_start":    shift_start,
         "weight_cost":    sys_raw.get("opt_weight_cost", 0.40),
         "weight_time":    sys_raw.get("opt_weight_time", 0.35),
         "weight_env":     sys_raw.get("opt_weight_env",  0.25),
-        "traffic_factor": sys_raw.get("traffic_factor",  1.0),
+        "traffic_factor": traffic_factor,
         "co2_shadow":     sys_raw.get("co2_shadow_chf",  0.12),
     }
     logger.info(
         f"[Step 4] Last-mile fleet: {[v['name'] for v in last_mile_veh]} | "
-        f"Backbone fleet: {[v['name'] for v in backbone_veh]}"
+        f"Backbone fleet: {[v['name'] for v in backbone_veh]} | "
+        f"Live-Verkehr: {'AN' if live_traffic else 'AUS'} (Faktor ×{traffic_factor})"
     )
 
     # ── Prepare data — extract ALL ORM fields into plain dicts BEFORE threads ──
