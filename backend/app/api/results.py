@@ -1,3 +1,5 @@
+import datetime
+import math
 from collections import defaultdict
 
 from fastapi import APIRouter
@@ -56,8 +58,6 @@ def get_hubs():
 
         sys_raw = {c.key: c.value for c in db.query(SystemConfig).all()}
         shift_h = float(sys_raw.get("shift_hours", "8.0"))
-        # Estimate delivery window based on shift start 08:00
-        import datetime
         start = datetime.time(8, 0)
         end_h = 8 + int(shift_h)
         end   = datetime.time(min(end_h, 23), 0)
@@ -207,7 +207,6 @@ def get_summary():
 @router.get("/summary/full")
 def get_full_summary():
     """Detailed summary for the analytics dashboard page — reads all specs from DB."""
-    import math
     db = SessionLocal()
     try:
         pharmacies = db.query(Pharmacy).all()
