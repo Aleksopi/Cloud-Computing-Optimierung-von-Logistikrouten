@@ -54,19 +54,18 @@ html, body, #root {
 /* ── Map tooltip ─────────────────────────────────────────────────────────── */
 .map-tooltip .maplibregl-popup-content {
   background: #1e293b;
-  border: 1px solid #334155;
+  border: 1px solid #475569;
   border-radius: 10px;
-  padding: 10px 14px;
-  box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+  padding: 9px 13px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.6);
   font-family: inherit;
   pointer-events: none;
-  color: #e2e8f0;
-  font-size: 12px;
-  line-height: 1.6;
-  min-width: 160px;
 }
-.map-tooltip .maplibregl-popup-tip { border-top-color: #1e293b; }
-.map-tooltip strong { color: #f1f5f9; font-weight: 600; }
+.map-tooltip .maplibregl-popup-tip { border-top-color: #475569; }
+.map-tooltip .t-wrap { color: #e2e8f0; font-size: 12px; line-height: 1.55; min-width: 150px; }
+.map-tooltip .t-wrap strong { color: #f8fafc; font-weight: 600; font-size: 12.5px; display: block; margin-bottom: 2px; }
+.map-tooltip .t-wrap .t-row { color: #cbd5e1; }
+.map-tooltip .t-wrap b { color: #93c5fd; font-weight: 600; }
 
 /* ── Loading bar animation ───────────────────────────────────────────────── */
 @keyframes loading-bar {

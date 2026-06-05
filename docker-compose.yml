@@ -50,6 +50,7 @@ services:
       HQ_LON: "7.4474"
       HQ_NAME: "HQ_Bern"
       DATA_DIR: /app/data
+      TZ: Europe/Zurich   # live-traffic model uses local Swiss time-of-day
     ports:
       - "8000:8000"
     volumes:
@@ -75,6 +76,7 @@ services:
       HQ_LON: "7.4474"
       HQ_NAME: "HQ_Bern"
       DATA_DIR: /app/data
+      TZ: Europe/Zurich   # live-traffic model uses local Swiss time-of-day
     volumes:
       - ./backend/data:/app/data
       - ./backend/app:/app/app

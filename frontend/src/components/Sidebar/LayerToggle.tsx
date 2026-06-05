@@ -1,5 +1,9 @@
-import type { PipelineStatus } from '../../types'
-import { COLORS } from '../Map/MapView'
+import { useEffect, useState } from 'react'
+import { api } from '../../api/client'
+import type { PipelineStatus, TrafficInfo } from '../../types'
+import { COLORS, VEHICLE_ROUTE_COLOR } from '../Map/MapView'
+
+const COLOR_BY_TYPE: Record<string, string> = Object.fromEntries(VEHICLE_ROUTE_COLOR)
 
 interface Props {
   visibleLayers:     Set<string>
@@ -8,6 +12,9 @@ interface Props {
   vehicleTypes:      string[]
   vehicleTypeFilter: Set<string>
   onToggleVehicle:   (type: string) => void
+  backboneTypes:      string[]
+  backboneTypeFilter: Set<string>
+  onToggleBackbone:   (type: string) => void
 }
 
 interface LayerDef {
@@ -19,17 +26,29 @@ interface LayerDef {
 
 const LAYERS: LayerDef[] = [
   { key: 'pharmacies', label: 'Apotheken',      colors: [COLORS.pharmacy],                              circle: true,  always: true },
-  { key: 'hubs',       label: 'Hubs',           colors: [COLORS.hqFill, COLORS.vzFill, COLORS.mvzFill], subLabels: ['HQ','VZ','mVZ'], circle: true, step: 1 },
-  { key: 'assignments',label: 'Einzugsgebiete', colors: [COLORS.assignmentVz, COLORS.assignmentMvz],   subLabels: ['VZ','mVZ'],      line: true,   step: 2 },
-  { key: 'backbone',   label: 'Lieferkette',    colors: [COLORS.backboneHqVz, COLORS.backboneVzMvz],   subLabels: ['HQ→VZ','VZ→mVZ'], line: true, step: 4 },
-  { key: 'routes',     label: 'Fahrzeugrouten', colors: [COLORS.sprinterRoute, COLORS.lkwRoute],        subLabels: ['Sprinter','LKW'], line: true,  step: 4 },
+  { key: 'hubs',       label: 'Hubs',           colors: [COLORS.hqFill, COLORS.vzFill, COLORS.mvzFill], subLabels: ['HQ','VZ','mVZ'], circle: true, step: 2 },
+  { key: 'assignments',label: 'Einzugsgebiete', colors: [COLORS.assignmentVz, COLORS.assignmentMvz],   subLabels: ['VZ','mVZ'],      line: true,   step: 3 },
+  { key: 'backbone',   label: 'Hauptlauf',      colors: [COLORS.backboneHqVz, COLORS.backboneVzMvz],   subLabels: ['HQ→VZ','VZ→mVZ'], line: true, step: 4 },
+  { key: 'routes',     label: 'Fahrzeugrouten', colors: [COLORS.sprinterRoute, COLORS.kleinLkwRoute],  subLabels: ['Sprinter','Klein-LKW'], line: true, step: 4 },
 ]
 
-const VEHICLE_COLORS = [COLORS.sprinterRoute, COLORS.lkwRoute, '#f59e0b','#8b5cf6','#06b6d4','#10b981']
+const FALLBACK_COLORS = ['#f59e0b', '#8b5cf6', '#06b6d4', '#10b981']
+const vehColor = (name: string, i: number) => COLOR_BY_TYPE[name] ?? FALLBACK_COLORS[i % FALLBACK_COLORS.length]
 
-export function LayerToggle({ visibleLayers, pipelineStatus, onToggle, vehicleTypes, vehicleTypeFilter, onToggleVehicle }: Props) {
+export function LayerToggle({ visibleLayers, pipelineStatus, onToggle, vehicleTypes, vehicleTypeFilter, onToggleVehicle,
+  backboneTypes, backboneTypeFilter, onToggleBackbone }: Props) {
   const avail = (l: LayerDef) => l.always || (l.step !== undefined && pipelineStatus[l.step]?.status === 'done')
   const routesDone = pipelineStatus[4]?.status === 'done'
+
+  // Read-only traffic-model status (the control itself lives in the sidebar Step 4 card).
+  const [traffic, setTraffic] = useState<TrafficInfo | null>(null)
+  useEffect(() => {
+    let alive = true
+    const load = () => api.getTraffic().then(t => { if (alive) setTraffic(t) }).catch(() => {})
+    load()
+    const id = setInterval(load, 60_000)
+    return () => { alive = false; clearInterval(id) }
+  }, [])
 
   return (
     <div className="bg-slate-900/95 backdrop-blur border border-slate-700/60 rounded-xl shadow-2xl shadow-black/50 p-3 min-w-[200px]">
@@ -86,42 +105,60 @@ export function LayerToggle({ visibleLayers, pipelineStatus, onToggle, vehicleTy
                 )}
               </label>
 
-              {/* Vehicle type sub-filter */}
+              {/* Last-mile vehicle-type sub-filter */}
               {isRoutes && on && routesDone && vehicleTypes.length > 0 && (
-                <div className="ml-6 mt-0.5 space-y-0.5">
-                  {vehicleTypes.map((vt, i) => {
-                    const color  = VEHICLE_COLORS[i % VEHICLE_COLORS.length]
-                    const active = vehicleTypeFilter.size === 0 || vehicleTypeFilter.has(vt)
-                    return (
-                      <label key={vt} className="flex items-center gap-1.5 py-0.5 px-1 rounded cursor-pointer hover:bg-slate-800/60">
-                        <div
-                          onClick={() => onToggleVehicle(vt)}
-                          className={`w-3 h-3 rounded border flex items-center justify-center flex-shrink-0 transition-colors ${
-                            active ? 'border-slate-500 bg-slate-700' : 'border-slate-700 bg-transparent'
-                          }`}
-                        >
-                          {active && <span className="w-1.5 h-1.5 rounded-sm" style={{ backgroundColor: color }} />}
-                        </div>
-                        <span className="w-2.5 h-0.5 rounded flex-shrink-0" style={{ backgroundColor: color }} />
-                        <span className={`text-xs ${active ? 'text-slate-400' : 'text-slate-600'}`}>{vt}</span>
-                      </label>
-                    )
-                  })}
-                </div>
+                <TypeSubFilter types={vehicleTypes} filter={vehicleTypeFilter} onToggle={onToggleVehicle} />
+              )}
+              {/* Hauptlauf (backbone) vehicle-type sub-filter */}
+              {layer.key === 'backbone' && on && routesDone && backboneTypes.length > 0 && (
+                <TypeSubFilter types={backboneTypes} filter={backboneTypeFilter} onToggle={onToggleBackbone} />
               )}
             </div>
           )
         })}
       </div>
 
-      {/* Live traffic placeholder */}
+      {/* Traffic-model status (read-only; toggle lives in the sidebar Step 4 card) */}
       <div className="mt-2.5 pt-2 border-t border-slate-700/60">
-        <div className="flex items-center gap-2 opacity-30 px-1">
-          <div className="w-3.5 h-3.5 rounded border border-slate-600 flex-shrink-0" />
-          <span className="text-slate-500 text-xs flex-1">Live-Verkehr</span>
-          <span className="text-xs text-slate-600 bg-slate-800 px-1.5 py-0.5 rounded">Bald</span>
+        <div className="flex items-center gap-2 px-1">
+          <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${
+            traffic?.enabled ? 'bg-amber-400' : 'bg-slate-600'}`} />
+          <span className={`text-xs flex-1 ${traffic?.enabled ? 'text-amber-200' : 'text-slate-500'}`}>Verkehrsmodell</span>
+          {traffic?.enabled
+            ? <span className="text-xs text-amber-300 bg-amber-950/40 border border-amber-800/40 px-1.5 py-0.5 rounded font-mono">
+                ×{traffic.effective_factor.toFixed(2)}
+              </span>
+            : <span className="text-xs text-slate-600 bg-slate-800 px-1.5 py-0.5 rounded">Aus</span>}
         </div>
       </div>
+    </div>
+  )
+}
+
+/** Per-vehicle-type checkbox list — used for both last-mile routes and Hauptlauf. */
+function TypeSubFilter({ types, filter, onToggle }: {
+  types: string[]; filter: Set<string>; onToggle: (t: string) => void
+}) {
+  return (
+    <div className="ml-6 mt-0.5 space-y-0.5">
+      {types.map((vt, i) => {
+        const color  = vehColor(vt, i)
+        const active = filter.size === 0 || filter.has(vt)
+        return (
+          <label key={vt} className="flex items-center gap-1.5 py-0.5 px-1 rounded cursor-pointer hover:bg-slate-800/60">
+            <div
+              onClick={() => onToggle(vt)}
+              className={`w-3 h-3 rounded border flex items-center justify-center flex-shrink-0 transition-colors ${
+                active ? 'border-slate-500 bg-slate-700' : 'border-slate-700 bg-transparent'
+              }`}
+            >
+              {active && <span className="w-1.5 h-1.5 rounded-sm" style={{ backgroundColor: color }} />}
+            </div>
+            <span className="w-2.5 h-0.5 rounded flex-shrink-0" style={{ backgroundColor: color }} />
+            <span className={`text-xs ${active ? 'text-slate-400' : 'text-slate-600'}`}>{vt}</span>
+          </label>
+        )
+      })}
     </div>
   )
 }

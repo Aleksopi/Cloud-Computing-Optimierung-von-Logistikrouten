@@ -11,16 +11,21 @@ from app.db.session import SessionLocal, engine
 logger = logging.getLogger(__name__)
 
 # ── Default vehicle fleet ──────────────────────────────────────────────────────
+# can_last_mile  → usable for Hub → Apotheke delivery
+# can_backbone   → usable for HQ → Hub and VZ → mVZ replenishment
 DEFAULT_VEHICLES = [
-    dict(name="Sprinter", vehicle_class="delivery", capacity=15, range_km=350.0,
-         cost_per_km=0.38, co2_g_per_km=185.0, speed_kmh=65.0, driver_chf_h=45.0,
-         service_min=20, max_per_hub=10, restock_threshold=5, sort_order=1, enabled=True),
-    dict(name="LKW", vehicle_class="delivery", capacity=200, range_km=500.0,
-         cost_per_km=1.20, co2_g_per_km=280.0, speed_kmh=75.0, driver_chf_h=55.0,
-         service_min=35, max_per_hub=5, restock_threshold=20, sort_order=2, enabled=True),
-    dict(name="Backbone", vehicle_class="backbone", capacity=None, range_km=1000.0,
-         cost_per_km=2.50, co2_g_per_km=450.0, speed_kmh=85.0, driver_chf_h=None,
-         service_min=None, max_per_hub=None, restock_threshold=None, sort_order=0, enabled=True),
+    dict(name="Sprinter",  vehicle_class="delivery", can_last_mile=True,  can_backbone=True,
+         capacity=15,   range_km=350.0,  cost_per_km=0.38, co2_g_per_km=185.0, speed_kmh=65.0,
+         driver_chf_h=45.0, service_min=20, max_per_hub=10, restock_threshold=5,  sort_order=1, enabled=True),
+    dict(name="Klein-LKW", vehicle_class="delivery", can_last_mile=True,  can_backbone=True,
+         capacity=40,   range_km=450.0,  cost_per_km=0.70, co2_g_per_km=230.0, speed_kmh=70.0,
+         driver_chf_h=50.0, service_min=25, max_per_hub=6,  restock_threshold=10, sort_order=2, enabled=True),
+    dict(name="LKW",       vehicle_class="backbone", can_last_mile=False, can_backbone=True,
+         capacity=200,  range_km=600.0,  cost_per_km=1.20, co2_g_per_km=280.0, speed_kmh=75.0,
+         driver_chf_h=55.0, service_min=35, max_per_hub=5,  restock_threshold=30, sort_order=3, enabled=True),
+    dict(name="Zug",       vehicle_class="backbone", can_last_mile=False, can_backbone=True,
+         capacity=1000, range_km=2000.0, cost_per_km=3.20, co2_g_per_km=520.0, speed_kmh=90.0,
+         driver_chf_h=70.0, service_min=45, max_per_hub=3,  restock_threshold=100, sort_order=4, enabled=True),
 ]
 
 # ── Default system configuration ──────────────────────────────────────────────
@@ -30,10 +35,35 @@ DEFAULT_SYSTEM_CONFIG = [
     ("opt_weight_cost",     "0.40",   "Optimierungsgewicht: Kosten",       "Anteil Fahrtkosten am Score (0–1)"),
     ("opt_weight_time",     "0.35",   "Optimierungsgewicht: Zeit",         "Anteil Fahrzeit am Score (0–1)"),
     ("opt_weight_env",      "0.25",   "Optimierungsgewicht: Umwelt",       "Anteil CO₂ am Score (0–1)"),
-    ("traffic_factor",      "1.0",    "Verkehrsfaktor",                    "1.0 = Freifluss; >1.0 = Stau"),
+    ("traffic_factor",      "1.0",    "Verkehrsfaktor (statisch)",         "1.0 = Freifluss; >1.0 = Stau. Gilt nur wenn das Verkehrsmodell AUS ist."),
+    ("live_traffic_enabled", "0",     "Verkehrsmodell (Tageszeit)",        "1 = simuliertes Tageszeit-Stau-Modell aktiv (keine Echtzeitdaten); 0 = statischer Verkehrsfaktor"),
+    ("traffic_peak_intensity", "1.0", "Verkehrsmodell: Stau-Intensität",   "Skaliert die Hauptverkehrs-Aufschläge der Simulation (1.0 = Standard)"),
     ("co2_shadow_chf",      "0.12",   "CO₂-Schattenpreis (CHF/kg)",        "Monetarisierung der Umweltkosten"),
     ("max_catchment_km",    "10.0",   "Max. Einzugsgebiet-Radius (km)",    "Für Warenbedarf-Berechnung"),
     ("vz_hard_radius_km",   "45.0",   "VZ-Zuweisungsradius (km)",          "Apotheke → direkt zu VZ wenn ≤ Radius"),
+    ("n_vz",                "4",      "Anzahl Verteilzentren (VZ)",        "Wird bei Hub Placement (Step 2) verwendet"),
+    ("n_mvz",               "20",     "Anzahl Mini-Verteilzentren (mVZ)",  "Wird bei Hub Placement (Step 2) verwendet"),
+    ("hq_direct_radius_km", "20.0",   "HQ Direktlieferungsradius (km)",    "Apotheken innerhalb dieses Radius beliefert HQ direkt"),
+    ("vz_capacity",         "600",    "VZ-Lagerkapazität (Einheiten)",     "Max. Warenmenge je Verteilzentrum"),
+    ("mvz_capacity",        "125",    "mVZ-Lagerkapazität (Einheiten)",    "Max. Warenmenge je Mini-Verteilzentrum"),
+    ("default_demand_est",  "3",      "Bedarfsschätzung pro Apotheke",     "Proxy für Kapazitätsprüfung vor Step 2"),
+    # Standortabhängige Lagerkosten (Step 2) — dichter besiedelt = teurer
+    ("warehouse_cost_hq",   "4000",   "Lagerkosten HQ (CHF)",              "Basis-Betriebskosten des Hauptquartiers"),
+    ("warehouse_cost_vz",   "1500",   "Lagerkosten VZ (CHF)",              "Basis-Betriebskosten je Verteilzentrum"),
+    ("warehouse_cost_mvz",  "500",    "Lagerkosten mVZ (CHF)",             "Basis-Betriebskosten je Mini-Verteilzentrum"),
+    ("warehouse_density_cost", "4.0", "Lagerkosten-Dichtezuschlag (CHF/Einh.)", "Aufschlag je lokaler Bedarfseinheit im Umkreis (Landpreis-Proxy)"),
+    ("warehouse_density_radius_km", "8.0", "Lager-Dichteradius (km)",      "Umkreis für die lokale Bedarfsdichte"),
+    ("warehouse_density_weight", "0.35", "Lagerkosten-Gewicht im Placement", "0 = Standort egal; ~0.5 = Hubs meiden teure (dichte) Lagen stark"),
+    # Öffnungszeiten (Stunden, z.B. 8.5 = 08:30)
+    ("shift_start",         "8.0",    "Schichtbeginn (Stunden)",           "Startzeit der Lieferschicht"),
+    ("pharmacy_open_hour",  "8.0",    "Apotheke Öffnung (Stunden)",        "Standard-Öffnungszeit für alle Apotheken"),
+    ("pharmacy_close_hour", "18.5",   "Apotheke Schluss (Stunden)",        "Standard-Schließzeit für alle Apotheken"),
+    ("hub_hq_open",         "6.0",    "HQ Öffnung (Stunden)",              "Öffnungszeit Hauptquartier"),
+    ("hub_hq_close",        "22.0",   "HQ Schluss (Stunden)",              "Schließzeit Hauptquartier"),
+    ("hub_vz_open",         "7.0",    "VZ Öffnung (Stunden)",              "Öffnungszeit Verteilzentrum"),
+    ("hub_vz_close",        "20.0",   "VZ Schluss (Stunden)",              "Schließzeit Verteilzentrum"),
+    ("hub_mvz_open",        "8.0",    "mVZ Öffnung (Stunden)",             "Öffnungszeit Mini-Verteilzentrum"),
+    ("hub_mvz_close",       "18.0",   "mVZ Schluss (Stunden)",             "Schließzeit Mini-Verteilzentrum"),
 ]
 
 
@@ -53,11 +83,10 @@ def init_db():
         if db.query(PopulationCell).count() == 0:
             _import_population(db)
 
-        if db.query(VehicleFleetConfig).count() == 0:
-            _seed_vehicles(db)
-
-        if db.query(SystemConfig).count() == 0:
-            _seed_system_config(db)
+        _ensure_vehicles(db)
+        _ensure_system_config(db)
+        _update_stale_defaults(db)
+        _apply_default_pharmacy_hours(db)
     finally:
         db.close()
 
@@ -66,8 +95,18 @@ def _migrate_columns():
     """Add new columns to existing tables without dropping data (idempotent)."""
     migrations = [
         "ALTER TABLE hubs ADD COLUMN IF NOT EXISTS parent_hub VARCHAR",
+        "ALTER TABLE hubs ADD COLUMN IF NOT EXISTS capacity INTEGER",
+        "ALTER TABLE hubs ADD COLUMN IF NOT EXISTS open_hour DOUBLE PRECISION",
+        "ALTER TABLE hubs ADD COLUMN IF NOT EXISTS close_hour DOUBLE PRECISION",
+        "ALTER TABLE hubs ADD COLUMN IF NOT EXISTS shift_start DOUBLE PRECISION",
+        "ALTER TABLE hubs ADD COLUMN IF NOT EXISTS shift_hours DOUBLE PRECISION",
+        "ALTER TABLE hubs ADD COLUMN IF NOT EXISTS warehouse_cost DOUBLE PRECISION",
+        "ALTER TABLE pharmacies ADD COLUMN IF NOT EXISTS open_hour DOUBLE PRECISION",
+        "ALTER TABLE pharmacies ADD COLUMN IF NOT EXISTS close_hour DOUBLE PRECISION",
         "ALTER TABLE vehicle_routes ADD COLUMN IF NOT EXISTS supply_tier VARCHAR",
         "ALTER TABLE vehicle_routes ADD COLUMN IF NOT EXISTS co2_kg DOUBLE PRECISION",
+        "ALTER TABLE vehicle_fleet_configs ADD COLUMN IF NOT EXISTS can_last_mile BOOLEAN DEFAULT FALSE",
+        "ALTER TABLE vehicle_fleet_configs ADD COLUMN IF NOT EXISTS can_backbone BOOLEAN DEFAULT FALSE",
     ]
     try:
         for sql in migrations:
@@ -78,18 +117,69 @@ def _migrate_columns():
         logger.warning(f"[init_db] Migration warning (non-fatal): {e}")
 
 
-def _seed_vehicles(db):
-    for v in DEFAULT_VEHICLES:
-        db.add(VehicleFleetConfig(**v))
-    db.commit()
-    logger.info(f"[init_db] Seeded {len(DEFAULT_VEHICLES)} vehicle configs")
+def _update_stale_defaults(db):
+    """Silently upgrade config values that still hold deprecated defaults."""
+    upgrades = [
+        # (key, old_value, new_value)
+        ("vz_capacity",  "320",  "600"),
+        ("mvz_capacity", "90",   "125"),
+    ]
+    changed = 0
+    for key, old_val, new_val in upgrades:
+        row = db.query(SystemConfig).filter(SystemConfig.key == key).first()
+        if row and row.value == old_val:
+            row.value = new_val
+            changed += 1
+    if changed:
+        db.commit()
+        logger.info(f"[init_db] Upgraded {changed} stale config default(s)")
 
 
-def _seed_system_config(db):
+def _apply_default_pharmacy_hours(db):
+    """Set default opening hours on pharmacies that don't have any yet (idempotent)."""
+    sys_raw = {c.key: c.value for c in db.query(SystemConfig).all()}
+    ph_open  = float(sys_raw.get("pharmacy_open_hour",  "8.0"))
+    ph_close = float(sys_raw.get("pharmacy_close_hour", "18.5"))
+    rows = db.query(Pharmacy).filter(Pharmacy.open_hour == None).all()  # noqa: E711
+    for p in rows:
+        p.open_hour  = ph_open
+        p.close_hour = ph_close
+    if rows:
+        db.commit()
+        logger.info(f"[init_db] Applied default opening hours to {len(rows)} pharmacies")
+
+
+def _ensure_vehicles(db):
+    """Seed the canonical fleet. If the new vehicle line-up (Klein-LKW, Zug) is
+    missing, the fleet predates the tier model → wipe and reseed cleanly."""
+    existing = db.query(VehicleFleetConfig).all()
+    names = {v.name for v in existing}
+    needs_reseed = not existing or "Klein-LKW" not in names or "Zug" not in names
+    if needs_reseed:
+        db.query(VehicleFleetConfig).delete()
+        db.commit()
+        for v in DEFAULT_VEHICLES:
+            db.add(VehicleFleetConfig(**v))
+        db.commit()
+        logger.info(f"[init_db] Fleet (re)seeded — {len(DEFAULT_VEHICLES)} vehicles")
+
+
+def _ensure_system_config(db):
+    """Insert missing config keys and refresh labels/descriptions of existing
+    ones (user-edited *values* are never overwritten)."""
+    existing = {c.key: c for c in db.query(SystemConfig).all()}
+    added = updated = 0
     for key, value, label, description in DEFAULT_SYSTEM_CONFIG:
-        db.add(SystemConfig(key=key, value=value, label=label, description=description))
-    db.commit()
-    logger.info(f"[init_db] Seeded {len(DEFAULT_SYSTEM_CONFIG)} system config entries")
+        row = existing.get(key)
+        if row is None:
+            db.add(SystemConfig(key=key, value=value, label=label, description=description))
+            added += 1
+        elif row.label != label or row.description != description:
+            row.label, row.description = label, description  # metadata only, keep value
+            updated += 1
+    if added or updated:
+        db.commit()
+        logger.info(f"[init_db] System config: +{added} new, {updated} label(s) refreshed")
 
 
 def _import_pharmacies(db):

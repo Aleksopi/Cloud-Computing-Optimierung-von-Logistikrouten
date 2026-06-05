@@ -16,6 +16,8 @@ class Pharmacy(Base):
     lon = Column(Float, nullable=False)
     demand = Column(Integer, nullable=True)
     hub_name = Column(String, nullable=True)
+    open_hour  = Column(Float, nullable=True)   # e.g. 8.0 = 08:00
+    close_hour = Column(Float, nullable=True)   # e.g. 18.5 = 18:30
 
 
 class Hub(Base):
@@ -26,6 +28,14 @@ class Hub(Base):
     lat = Column(Float, nullable=False)
     lon = Column(Float, nullable=False)
     parent_hub = Column(String, nullable=True)  # mVZ → nearest VZ name
+    capacity   = Column(Integer, nullable=True) # warehouse capacity in goods units
+    open_hour  = Column(Float,   nullable=True) # e.g. 7.0 = 07:00
+    close_hour = Column(Float,   nullable=True) # e.g. 20.0 = 20:00
+    # Per-hub delivery shift (each city its own) — seeded from global config
+    shift_start = Column(Float, nullable=True)  # e.g. 8.0 = 08:00 dispatch
+    shift_hours = Column(Float, nullable=True)  # max driving hours per shift
+    # Location-dependent warehouse operating cost (CHF), set at placement time
+    warehouse_cost = Column(Float, nullable=True)
 
 
 class Assignment(Base):
@@ -78,7 +88,9 @@ class VehicleFleetConfig(Base):
     __tablename__ = "vehicle_fleet_configs"
     id                = Column(Integer, primary_key=True)
     name              = Column(String, nullable=False)         # display name & vehicle_type key
-    vehicle_class     = Column(String, nullable=False)         # "delivery" or "backbone"
+    vehicle_class     = Column(String, nullable=True)          # legacy; kept for compat
+    can_last_mile     = Column(Boolean, default=False)         # usable Hub → Apotheke
+    can_backbone      = Column(Boolean, default=False)         # usable HQ → Hub / VZ → mVZ
     capacity          = Column(Integer, nullable=True)         # items per load (None = unlimited)
     range_km          = Column(Float, nullable=False)
     cost_per_km       = Column(Float, nullable=False)

@@ -1,8 +1,14 @@
 """
-Step 4 — Last-Mile Route Optimisation
-Vehicle fleet and all parameters are loaded from DB at runtime (fully configurable).
-Multi-objective greedy VRP: minimises weighted cost + time + CO₂.
-Each hub solved in parallel. Backbone supply-chain routes appended afterwards.
+Step 4 — Route Optimisation (last-mile + backbone)
+Fully DB-driven, multi-objective greedy VRP (cost + time + CO₂).
+
+Distances are **road-network distances** from OSRM (one /table call per depot),
+not straight-line Haversine — these km drive stop selection, range, time, cost
+and CO₂. Haversine is only a fallback when OSRM is unavailable.
+
+Last-mile (Hub → Apotheke): vehicles with can_last_mile=True, small-first.
+Backbone  (HQ → VZ, VZ → mVZ): vehicles with can_backbone=True, large-first.
+Every vehicle performs a multi-stop tour (depot → stop → stop → … → depot).
 """
 from __future__ import annotations
 
@@ -15,6 +21,8 @@ import requests as _http
 
 from app.config import settings
 from app.db.models import Assignment, Hub, Pharmacy, SystemConfig, VehicleFleetConfig, VehicleRoute
+from app.services.osrm import osrm_distance_matrix
+from app.services.traffic import effective_factor
 
 logger = logging.getLogger(__name__)
 
@@ -35,59 +43,68 @@ def _road_geometry(waypoints: list[list[float]]) -> list[list[float]]:
         return waypoints
 
 
-def _hav(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
-    R = 6371.0
-    dlat = np.radians(lat2 - lat1)
-    dlon = np.radians(lon2 - lon1)
-    a = (np.sin(dlat / 2) ** 2
-         + np.cos(np.radians(lat1)) * np.cos(np.radians(lat2)) * np.sin(dlon / 2) ** 2)
-    return float(R * 2 * np.arcsin(np.sqrt(np.clip(a, 0.0, 1.0))))
+def _hav_matrix(nodes: list[tuple[float, float]]) -> np.ndarray:
+    """Vectorised Haversine distance matrix (km) — straight-line fallback."""
+    lat = np.radians(np.array([n[0] for n in nodes], dtype=np.float64))
+    lon = np.radians(np.array([n[1] for n in nodes], dtype=np.float64))
+    dlat = lat[:, None] - lat[None, :]
+    dlon = lon[:, None] - lon[None, :]
+    a = np.sin(dlat / 2) ** 2 + np.cos(lat[:, None]) * np.cos(lat[None, :]) * np.sin(dlon / 2) ** 2
+    return 6371.0 * 2 * np.arcsin(np.sqrt(np.clip(a, 0.0, 1.0)))
 
 
-def _composite_score(
-    d_km: float,
-    cost_per_km: float,
-    co2_g_per_km: float,
-    speed_kmh: float,
-    driver_chf_h: float,
-    service_min: float,
-    opt_cost: float,
-    opt_time: float,
-    opt_env: float,
-    traffic_factor: float,
-    co2_shadow_chf: float,
-) -> float:
-    """Unified stop-selection score (lower = better).
-    Blends direct vehicle cost, driver-time cost, and monetised CO₂.
-    traffic_factor > 1.0 increases time cost, simulating congestion.
-    """
-    drive_h   = (d_km / speed_kmh) * traffic_factor
+def _road_matrix(nodes: list[tuple[float, float]]) -> np.ndarray:
+    """Road-network distance matrix (km) over [depot, stop_1, …, stop_n].
+
+    Uses OSRM; falls back to Haversine entirely when OSRM is unavailable, and
+    patches individual unreachable pairs with their straight-line distance."""
+    hv = _hav_matrix(nodes)
+    road = osrm_distance_matrix(nodes)
+    if road is None or road.shape != hv.shape:
+        return hv
+    if not np.isfinite(road).all():
+        road = np.where(np.isfinite(road), road, hv)
+    np.fill_diagonal(road, 0.0)
+    return road
+
+
+def _composite_score(d_km, cost_per_km, co2_g_per_km, speed_kmh, driver_chf_h, service_min, opt):
+    """Unified stop-selection score (lower = better): cost + time + monetised CO₂."""
+    drive_h   = (d_km / speed_kmh) * opt["traffic_factor"]
     cost      = d_km * cost_per_km
     time_cost = (drive_h + service_min / 60.0) * driver_chf_h
-    co2_cost  = (d_km * co2_g_per_km / 1000.0) * co2_shadow_chf
-    return opt_cost * cost + opt_time * time_cost + opt_env * co2_cost
+    co2_cost  = (d_km * co2_g_per_km / 1000.0) * opt["co2_shadow"]
+    return opt["weight_cost"] * cost + opt["weight_time"] * time_cost + opt["weight_env"] * co2_cost
 
 
-# ── VRP solver ────────────────────────────────────────────────────────────────
+# ── Generalised multi-stop VRP solver ──────────────────────────────────────────
 
-def _solve_hub(
-    hub_name: str,
-    hub_lat: float,
-    hub_lon: float,
-    stops: list[dict],
-    delivery_vehicles: list[dict],   # plain dicts — thread-safe
-    opt: dict,                        # optimisation params
+def _solve_vrp(
+    depot_name: str,
+    depot_lat: float,
+    depot_lon: float,
+    stops: list[dict],          # [{id, lat, lon, demand}, ...]
+    vehicles: list[dict],       # plain dicts, in deployment order
+    opt: dict,
 ) -> list[dict]:
-    """Greedy nearest-neighbour VRP.  Iterates delivery vehicles in sort_order.
-    Each vehicle type contributes up to max_per_hub vehicles before the next type."""
+    """Greedy nearest-neighbour VRP. Deploys each vehicle type up to max_per_hub.
+    Each vehicle drives a multi-stop tour minimising the composite score.
+
+    Distances come from a road-network matrix over [depot, stop_1, …, stop_n];
+    every stop carries its matrix index in ``_node`` (depot = 0)."""
     routes: list[dict] = []
     remaining = list(stops)
 
-    for vconf in delivery_vehicles:
+    # Road-network distance matrix (km) over depot + all stops; depot is node 0.
+    nodes = [(depot_lat, depot_lon)] + [(s["lat"], s["lon"]) for s in stops]
+    dmat = _road_matrix(nodes)
+    for k, s in enumerate(stops, start=1):
+        s["_node"] = k
+
+    for vconf in vehicles:
         if not remaining:
             break
-
-        cap         = vconf["capacity"]          # None = unlimited
+        cap         = vconf["capacity"]                 # None = unlimited
         range_km    = vconf["range_km"]
         cost_km     = vconf["cost_per_km"]
         co2_g_km    = vconf["co2_g_per_km"]
@@ -101,55 +118,44 @@ def _solve_hub(
         for vnum in range(1, max_n + 1):
             if not remaining:
                 break
-
-            vehicle_id  = f"{hub_name}_{vname}_{vnum}"
-            route_stops: list[int] = []
-            stop_coords: list[list[float]] = [[hub_lon, hub_lat]]
+            vehicle_id   = f"{depot_name}_{vname}_{vnum}"
+            route_ids: list = []
+            stop_coords: list[list[float]] = [[depot_lon, depot_lat]]
             items_loaded = cap if cap else 10_000_000
-            km_used      = 0.0
-            hours_used   = 0.0
+            km_used = hours_used = total_co2_g = 0.0
             total_items  = 0
-            total_co2_g  = 0.0
             restock_done = 0
-            cur_lat, cur_lon = hub_lat, hub_lon
+            cur_idx = 0  # start at the depot (matrix node 0)
 
             while remaining:
                 best_idx, best_score, best_d = None, np.inf, 0.0
                 for idx, stop in enumerate(remaining):
                     if stop["demand"] > items_loaded:
                         continue
-                    d_to   = _hav(cur_lat, cur_lon, stop["lat"], stop["lon"])
-                    d_back = _hav(stop["lat"], stop["lon"], hub_lat, hub_lon)
+                    d_to   = float(dmat[cur_idx, stop["_node"]])    # road km here→stop
+                    d_back = float(dmat[stop["_node"], 0])          # road km stop→depot
                     if km_used + d_to + d_back > range_km:
                         continue
                     drive_h = (d_to / speed) * opt["traffic_factor"]
                     if hours_used + drive_h + svc_min / 60.0 > opt["shift_hours"]:
                         continue
-                    score = _composite_score(
-                        d_to, cost_km, co2_g_km, speed, driver_h, svc_min,
-                        opt["weight_cost"], opt["weight_time"], opt["weight_env"],
-                        opt["traffic_factor"], opt["co2_shadow"],
-                    )
+                    # ── Opening-hours constraint ───────────────────────────
+                    arrival_h  = opt.get("shift_start", 8.0) + hours_used + drive_h
+                    stop_open  = stop.get("open_hour",  0.0)
+                    stop_close = stop.get("close_hour", 24.0)
+                    if stop_open  > 0.0  and arrival_h < stop_open:
+                        continue   # arrives before opening (no waiting in model)
+                    if stop_close < 24.0 and arrival_h + svc_min / 60.0 > stop_close:
+                        continue   # service would exceed closing time
+                    score = _composite_score(d_to, cost_km, co2_g_km, speed, driver_h, svc_min, opt)
                     if score < best_score:
                         best_score, best_idx, best_d = score, idx, d_to
 
                 if best_idx is None:
-                    # Try capacity restock if that's the bottleneck
-                    if (cap is not None
-                            and restock_done == 0
-                            and items_loaded < restock_thr):
-                        d_r = _hav(cur_lat, cur_lon, hub_lat, hub_lon)
-                        km_used     += d_r
-                        total_co2_g += d_r * co2_g_km
-                        hours_used  += (d_r / speed) * opt["traffic_factor"]
-                        cur_lat, cur_lon = hub_lat, hub_lon
-                        items_loaded = cap
-                        restock_done += 1
-                        continue
                     break
 
                 stop = remaining.pop(best_idx)
-                route_stops.append(stop["pharmacy_id"])
+                route_ids.append(stop["id"])
                 stop_coords.append([stop["lon"], stop["lat"]])
                 items_loaded -= stop["demand"]
                 total_items  += stop["demand"]
@@ -157,192 +163,204 @@ def _solve_hub(
                 km_used      += best_d
                 total_co2_g  += best_d * co2_g_km
                 hours_used   += drive_h + svc_min / 60.0
-                cur_lat, cur_lon = stop["lat"], stop["lon"]
+                cur_idx       = stop["_node"]
 
-            if route_stops:
-                d_ret        = _hav(cur_lat, cur_lon, hub_lat, hub_lon)
+            if route_ids:
+                d_ret        = float(dmat[cur_idx, 0])   # road km back to depot
                 km_used     += d_ret
                 total_co2_g += d_ret * co2_g_km
-                stop_coords.append([hub_lon, hub_lat])
-                total_cost = round(km_used * cost_km + hours_used * driver_h, 2)
+                stop_coords.append([depot_lon, depot_lat])
                 routes.append(dict(
-                    hub_name=hub_name,
+                    hub_name=depot_name,
                     vehicle_id=vehicle_id,
                     vehicle_type=vname,
-                    stops=route_stops,
+                    stops=route_ids,
                     stop_coords=_road_geometry(stop_coords),
                     total_km=round(km_used, 2),
                     total_hours=round(hours_used, 2),
                     total_items=total_items,
-                    total_cost_chf=total_cost,
+                    total_cost_chf=round(km_used * cost_km + hours_used * driver_h, 2),
                     co2_kg=round(total_co2_g / 1000.0, 3),
                     restock_count=restock_done,
                 ))
 
     if remaining:
-        logger.warning(f"[Step 4] {hub_name}: {len(remaining)} stops unrouted (capacity/range exceeded)")
-
+        logger.warning(f"[Step 4] {depot_name}: {len(remaining)} stops unrouted (capacity/range)")
     return routes
+
+
+def _to_dicts(rows: list[VehicleFleetConfig]) -> list[dict]:
+    return [
+        dict(
+            name=v.name, capacity=v.capacity, range_km=v.range_km,
+            cost_per_km=v.cost_per_km, co2_g_per_km=v.co2_g_per_km, speed_kmh=v.speed_kmh,
+            driver_chf_h=float(v.driver_chf_h or 0), service_min=int(v.service_min or 20),
+            max_per_hub=int(v.max_per_hub or 5), restock_threshold=int(v.restock_threshold or 5),
+        )
+        for v in rows
+    ]
 
 
 # ── Orchestrator ──────────────────────────────────────────────────────────────
 
 def run_routes(db) -> None:
-    # ── Load vehicle fleet from DB ────────────────────────────────────────────
-    delivery_veh = (
-        db.query(VehicleFleetConfig)
-        .filter(VehicleFleetConfig.vehicle_class == "delivery",
-                VehicleFleetConfig.enabled == True)  # noqa: E712
-        .order_by(VehicleFleetConfig.sort_order)
-        .all()
-    )
-    backbone_cfg = (
-        db.query(VehicleFleetConfig)
-        .filter(VehicleFleetConfig.vehicle_class == "backbone",
-                VehicleFleetConfig.enabled == True)  # noqa: E712
-        .first()
-    )
+    all_veh = db.query(VehicleFleetConfig).filter(VehicleFleetConfig.enabled == True).all()  # noqa: E712
 
-    # Convert to plain dicts (thread-safe)
-    delivery_dicts = [
-        dict(
-            name=v.name,
-            capacity=v.capacity,
-            range_km=v.range_km,
-            cost_per_km=v.cost_per_km,
-            co2_g_per_km=v.co2_g_per_km,
-            speed_kmh=v.speed_kmh,
-            driver_chf_h=float(v.driver_chf_h or 0),
-            service_min=int(v.service_min or 20),
-            max_per_hub=int(v.max_per_hub or 10),
-            restock_threshold=int(v.restock_threshold or 5),
-        )
-        for v in delivery_veh
-    ]
+    # Last-mile fleet: small vehicles first (sort_order ascending)
+    last_mile_veh = _to_dicts(sorted(
+        [v for v in all_veh if v.can_last_mile], key=lambda v: v.sort_order))
+    # Backbone fleet: large capacity first (bulk haul by train/LKW before vans)
+    backbone_veh = _to_dicts(sorted(
+        [v for v in all_veh if v.can_backbone], key=lambda v: -(v.capacity or 0)))
 
-    # ── Load system config ────────────────────────────────────────────────────
     sys_raw = {c.key: float(c.value) for c in db.query(SystemConfig).all()}
-    opt = {
-        "shift_hours":    sys_raw.get("shift_hours",      8.0),
-        "weight_cost":    sys_raw.get("opt_weight_cost",  0.40),
-        "weight_time":    sys_raw.get("opt_weight_time",  0.35),
-        "weight_env":     sys_raw.get("opt_weight_env",   0.25),
-        "traffic_factor": sys_raw.get("traffic_factor",   1.0),
-        "co2_shadow":     sys_raw.get("co2_shadow_chf",   0.12),
+
+    # ── Traffic model (time-of-day simulation) + per-hub shift ────────────────
+    # Each city/hub has its own delivery shift → its own averaged congestion when
+    # the traffic model is ON. OFF → the static configured `traffic_factor`.
+    live_traffic   = sys_raw.get("live_traffic_enabled", 0.0) >= 0.5
+    peak_intensity = sys_raw.get("traffic_peak_intensity", 1.0)
+    static_tf      = sys_raw.get("traffic_factor", 1.0)
+    g_shift_start  = sys_raw.get("shift_start", 8.0)
+    g_shift_hours  = sys_raw.get("shift_hours", 8.0)
+
+    base_opt = {
+        "weight_cost": sys_raw.get("opt_weight_cost", 0.40),
+        "weight_time": sys_raw.get("opt_weight_time", 0.35),
+        "weight_env":  sys_raw.get("opt_weight_env",  0.25),
+        "co2_shadow":  sys_raw.get("co2_shadow_chf",  0.12),
     }
 
+    def _hub_opt(h: dict) -> dict:
+        """Per-hub optimisation context — each city its own shift + traffic factor."""
+        s_start = h.get("shift_start") or g_shift_start
+        s_hours = h.get("shift_hours") or g_shift_hours
+        tf = effective_factor(enabled=live_traffic, static_factor=static_tf,
+                              shift_start=s_start, shift_hours=s_hours,
+                              peak_intensity=peak_intensity)
+        return {**base_opt, "shift_start": s_start, "shift_hours": s_hours, "traffic_factor": tf}
+
     logger.info(
-        f"[Step 4] Fleet: {[d['name'] for d in delivery_dicts]} | "
-        f"Backbone: {backbone_cfg.name if backbone_cfg else 'none'} | "
-        f"Weights cost={opt['weight_cost']} time={opt['weight_time']} env={opt['weight_env']}"
+        f"[Step 4] Last-mile fleet: {[v['name'] for v in last_mile_veh]} | "
+        f"Backbone fleet: {[v['name'] for v in backbone_veh]} | "
+        f"Verkehrsmodell: {'AN' if live_traffic else 'AUS'} (Tageszeit-Sim., per-Hub Schicht)"
     )
 
-    # ── Prepare stops ─────────────────────────────────────────────────────────
+    # ── Prepare data — extract ALL ORM fields into plain dicts BEFORE threads ──
     pharmacies = {p.id: p for p in db.query(Pharmacy).all()}
-    hubs: dict[str, dict] = {
-        h.name: {"lat": float(h.lat), "lon": float(h.lon)}
-        for h in db.query(Hub).filter(Hub.hub_type != "HQ").all()
+    # Hub plain dicts — safe for cross-thread access (no lazy-loading possible)
+    hub_dicts: dict[str, dict] = {
+        h.name: {
+            "name":        h.name,
+            "hub_type":    h.hub_type,
+            "lat":         float(h.lat),
+            "lon":         float(h.lon),
+            "parent_hub":  h.parent_hub,
+            "open_hour":   float(h.open_hour  or 0.0),
+            "close_hour":  float(h.close_hour or 24.0),
+            "shift_start": float(h.shift_start) if h.shift_start is not None else None,
+            "shift_hours": float(h.shift_hours) if h.shift_hours is not None else None,
+        }
+        for h in db.query(Hub).all()
     }
     assignments = db.query(Assignment).all()
 
+    # Build hub_stops FIRST — needed to decide which hubs are active
     hub_stops:  dict[str, list[dict]] = defaultdict(list)
     hub_demand: dict[str, int]        = defaultdict(int)
     for a in assignments:
         p = pharmacies.get(a.pharmacy_id)
         if p:
-            demand = int(p.demand or 1)
-            hub_stops[a.hub_name].append(
-                {"pharmacy_id": p.id, "lat": float(p.lat), "lon": float(p.lon), "demand": demand}
-            )
-            hub_demand[a.hub_name] += demand
+            d = int(p.demand or 1)
+            hub_stops[a.hub_name].append({
+                "id": p.id, "lat": float(p.lat), "lon": float(p.lon), "demand": d,
+                "open_hour":  float(p.open_hour  or 0.0),
+                "close_hour": float(p.close_hour or 24.0),
+            })
+            hub_demand[a.hub_name] += d
+
+    # Include HQ in last-mile if it has directly-assigned pharmacies
+    # (happens when pharmacy is within hq_direct_radius_km configured in Step 3)
+    delivery_hub_dicts = {
+        n: d for n, d in hub_dicts.items()
+        if d["hub_type"] != "HQ" or hub_stops.get(n)
+    }
 
     db.query(VehicleRoute).delete()
     db.commit()
 
-    # ── Parallel last-mile routing ────────────────────────────────────────────
-    logger.info(f"[Step 4] Routing {len(hubs)} hubs in parallel…")
+    # ── Last-mile routing (parallel per hub) ──────────────────────────────────
+    logger.info(f"[Step 4] Last-mile: routing {len(delivery_hub_dicts)} hubs…")
     all_routes: list[dict] = []
 
     def _process(hub_name: str):
-        hub = hubs[hub_name]
-        stops = hub_stops.get(hub_name, [])
-        logger.info(f"  {hub_name}: {len(stops)} stops")
-        return _solve_hub(hub_name, hub["lat"], hub["lon"], stops, delivery_dicts, opt)
+        h = delivery_hub_dicts[hub_name]   # plain dict — fully thread-safe
+        return _solve_vrp(hub_name, h["lat"], h["lon"],
+                          hub_stops.get(hub_name, []), last_mile_veh, _hub_opt(h))
 
     with ThreadPoolExecutor(max_workers=8) as pool:
-        futures = [pool.submit(_process, name) for name in hubs]
+        futures = [pool.submit(_process, n) for n in delivery_hub_dicts]
         for fut in as_completed(futures):
             all_routes.extend(fut.result())
 
-    route_objs = [
-        VehicleRoute(
-            hub_name=r["hub_name"], vehicle_id=r["vehicle_id"], vehicle_type=r["vehicle_type"],
-            stops=r["stops"], stop_coords=r["stop_coords"],
-            total_km=r["total_km"], total_hours=r["total_hours"],
-            total_items=r["total_items"], total_cost_chf=r["total_cost_chf"],
-            co2_kg=r["co2_kg"], restock_count=r["restock_count"],
-            supply_tier="last_mile",
+    db.bulk_save_objects([_route_obj(r, "last_mile") for r in all_routes])
+    db.commit()
+
+    # ── Backbone routing (single thread, plain dicts) ─────────────────────────
+    logger.info("[Step 4] Backbone: HQ → VZ and VZ → mVZ…")
+    hq_d     = next((d for d in hub_dicts.values() if d["hub_type"] == "HQ"), None)
+    vz_list  = [d for d in hub_dicts.values() if d["hub_type"] == "VZ"]
+    mvz_list = [d for d in hub_dicts.values() if d["hub_type"] == "mVZ"]
+    backbone_routes: list[dict] = []
+
+    if hq_d and backbone_veh:
+        # Goods volume that must reach each VZ = its own pharmacies + its child mVZs
+        vz_total: dict[str, int] = {}
+        for vz in vz_list:
+            child = sum(hub_demand.get(m["name"], 0) for m in mvz_list if m["parent_hub"] == vz["name"])
+            vz_total[vz["name"]] = hub_demand.get(vz["name"], 0) + child
+
+        # HQ → all VZs (multi-stop tour)
+        hq_stops = [
+            {"id": vz["name"], "lat": vz["lat"], "lon": vz["lon"],
+             "demand": max(1, vz_total.get(vz["name"], 0))}
+            for vz in vz_list
+        ]
+        backbone_routes.extend(
+            _solve_vrp(hq_d["name"], hq_d["lat"], hq_d["lon"], hq_stops, backbone_veh, _hub_opt(hq_d))
         )
-        for r in all_routes
-    ]
-    db.bulk_save_objects(route_objs)
-    db.commit()
 
-    # ── Backbone supply-chain routes (HQ → VZ → mVZ) ─────────────────────────
-    logger.info("[Step 4] Computing backbone supply-chain routes…")
-    hq_obj  = db.query(Hub).filter(Hub.hub_type == "HQ").first()
-    all_vz  = db.query(Hub).filter(Hub.hub_type == "VZ").all()
-    all_mvz = db.query(Hub).filter(Hub.hub_type == "mVZ").all()
-    backbone_objs: list[VehicleRoute] = []
-
-    bb_cost_km  = backbone_cfg.cost_per_km  if backbone_cfg else 2.50
-    bb_co2_km   = backbone_cfg.co2_g_per_km if backbone_cfg else 450.0
-    bb_speed    = backbone_cfg.speed_kmh    if backbone_cfg else 85.0
-    bb_name     = backbone_cfg.name         if backbone_cfg else "Backbone"
-
-    if hq_obj:
-        for vz in all_vz:
-            total_items = hub_demand.get(vz.name, 0) + sum(
-                hub_demand.get(m.name, 0) for m in all_mvz if m.parent_hub == vz.name
-            )
-            km    = _hav(hq_obj.lat, hq_obj.lon, vz.lat, vz.lon)
-            backbone_objs.append(VehicleRoute(
-                hub_name=hq_obj.name,
-                vehicle_id=f"Backbone_HQ→{vz.name}",
-                vehicle_type=bb_name,
-                stops=[], stop_coords=_road_geometry([[hq_obj.lon, hq_obj.lat], [vz.lon, vz.lat]]),
-                total_km=round(km, 2), total_hours=round(km / bb_speed, 2),
-                total_items=total_items,
-                total_cost_chf=round(km * bb_cost_km, 2),
-                co2_kg=round(km * bb_co2_km / 1000.0, 3),
-                restock_count=0, supply_tier="backbone",
-            ))
-            logger.info(f"  HQ → {vz.name}: {km:.0f} km, {total_items} items")
-
-        for mvz in all_mvz:
-            parent = next((v for v in all_vz if v.name == mvz.parent_hub), None)
-            if not parent:
+        # Each VZ → its child mVZs (multi-stop tour)
+        for vz in vz_list:
+            children = [m for m in mvz_list if m["parent_hub"] == vz["name"]]
+            if not children:
                 continue
-            km = _hav(parent.lat, parent.lon, mvz.lat, mvz.lon)
-            backbone_objs.append(VehicleRoute(
-                hub_name=parent.name,
-                vehicle_id=f"Backbone_{parent.name}→{mvz.name}",
-                vehicle_type=bb_name,
-                stops=[], stop_coords=_road_geometry([[parent.lon, parent.lat], [mvz.lon, mvz.lat]]),
-                total_km=round(km, 2), total_hours=round(km / bb_speed, 2),
-                total_items=hub_demand.get(mvz.name, 0),
-                total_cost_chf=round(km * bb_cost_km, 2),
-                co2_kg=round(km * bb_co2_km / 1000.0, 3),
-                restock_count=0, supply_tier="backbone",
-            ))
+            mvz_stops = [
+                {"id": m["name"], "lat": m["lat"], "lon": m["lon"],
+                 "demand": max(1, hub_demand.get(m["name"], 0))}
+                for m in children
+            ]
+            backbone_routes.extend(
+                _solve_vrp(vz["name"], vz["lat"], vz["lon"], mvz_stops, backbone_veh, _hub_opt(vz))
+            )
 
-    db.bulk_save_objects(backbone_objs)
+    db.bulk_save_objects([_route_obj(r, "backbone") for r in backbone_routes])
     db.commit()
 
-    total_km  = sum(r["total_km"]       for r in all_routes)
-    total_cost = sum(r["total_cost_chf"] for r in all_routes)
-    total_co2  = sum(r["co2_kg"]         for r in all_routes)
+    tk = sum(r["total_km"] for r in all_routes)
+    tc = sum(r["total_cost_chf"] for r in all_routes)
+    tco2 = sum(r["co2_kg"] for r in all_routes)
     logger.info(
-        f"[Step 4] Done — {len(route_objs)} last-mile + {len(backbone_objs)} backbone | "
-        f"{total_km:.0f} km | CHF {total_cost:.0f} | {total_co2:.0f} kg CO₂"
+        f"[Step 4] Done — {len(all_routes)} last-mile + {len(backbone_routes)} backbone | "
+        f"{tk:.0f} km | CHF {tc:.0f} | {tco2:.0f} kg CO₂"
+    )
+
+
+def _route_obj(r: dict, tier: str) -> VehicleRoute:
+    return VehicleRoute(
+        hub_name=r["hub_name"], vehicle_id=r["vehicle_id"], vehicle_type=r["vehicle_type"],
+        stops=r["stops"], stop_coords=r["stop_coords"],
+        total_km=r["total_km"], total_hours=r["total_hours"],
+        total_items=r["total_items"], total_cost_chf=r["total_cost_chf"],
+        co2_kg=r["co2_kg"], restock_count=r["restock_count"], supply_tier=tier,
     )

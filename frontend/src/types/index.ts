@@ -14,6 +14,29 @@ export interface SelectedFeature {
   properties: Record<string, unknown>
 }
 
+/** Drives map dimming: only related features stay opaque. */
+export interface HighlightState {
+  hubs: string[]              // relevant hub names (the chain)
+  pharmacyId: number | null   // highlight a single assignment line
+  routeId: number | null      // highlight a single vehicle route (numeric id)
+  vehicleId: string | null    // highlight/filter a single vehicle_id string
+  primaryHub: string | null   // clicked hub → colour its outbound vs inbound supply distinctly
+}
+
+export interface RouteSummary {
+  id: number
+  hub_name: string
+  vehicle_id: string
+  vehicle_type: string
+  total_km: number
+  total_hours: number
+  total_items: number
+  total_cost_chf: number
+  co2_kg: number | null
+  stop_count: number
+  restock_count: number
+}
+
 export interface Summary {
   hubs: number
   pharmacies_total: number
@@ -31,7 +54,9 @@ export interface Summary {
 export interface VehicleConfig {
   id: number
   name: string
-  vehicle_class: 'delivery' | 'backbone'
+  vehicle_class: string | null
+  can_last_mile: boolean
+  can_backbone: boolean
   capacity: number | null
   range_km: number
   cost_per_km: number
@@ -54,6 +79,19 @@ export interface SystemConfigEntry {
   value: string
   label: string | null
   description: string | null
+}
+
+// ── Live Traffic ──────────────────────────────────────────────────────────────
+
+export interface TrafficInfo {
+  enabled:            boolean
+  peak_intensity:     number
+  static_factor:      number   // factor applied when live traffic is OFF
+  effective_factor:   number   // factor Step 4 actually applies
+  current_congestion: number   // modelled multiplier for the current time of day (simulated)
+  shift_start:        number
+  shift_hours:        number
+  profile:            number[] // 24 hourly congestion multipliers
 }
 
 // ── Analytics Dashboard ───────────────────────────────────────────────────────
@@ -89,17 +127,55 @@ export interface VzStats {
   mvz: MvzStats[]
 }
 
+export interface IndividualRoute {
+  vehicle_id:    string
+  vehicle_type:  string
+  hub_name:      string
+  stop_count:    number
+  total_km:      number
+  total_hours:   number
+  total_items:   number
+  total_cost_chf: number
+  co2_kg:        number
+  restock_count: number
+}
+
+export interface HubLoad {
+  name:     string
+  hub_type: string
+  load:     number
+  capacity: number
+  pct:      number
+  warehouse_cost: number | null
+}
+
+export interface BackboneRoute extends IndividualRoute {
+  from_hub: string
+  to_hubs:  string[]
+  tier:     'hq_vz' | 'vz_mvz'
+}
+
+export interface FleetUtilization {
+  total_available: number
+  actually_used:   number
+  utilization_pct: number
+}
+
 export interface FullSummary {
   overview: {
     total_cost_chf: number
+    warehouse_cost_chf: number
+    total_cost_incl_warehouse_chf: number
     total_co2_kg: number
     total_km: number
     total_last_mile_routes: number
+    total_backbone_routes: number
     pharmacies_total: number
     pharmacies_assigned: number
     hubs_total: number
   }
   fleet_by_type: Record<string, FleetStats>
+  backbone_by_type: Record<string, FleetStats>
   fleet: {
     last_mile: FleetStats
     backbone: FleetStats
@@ -107,9 +183,15 @@ export interface FullSummary {
   vehicle_specs: VehicleConfig[]
   optimization: {
     weights: { cost: number; time: number; environment: number }
-    traffic_factor: number
+    traffic_factor: number               // factor actually applied by Step 4
+    static_traffic_factor: number
+    live_traffic_enabled: boolean
+    traffic_peak_intensity: number
+    effective_traffic_factor: number
+    traffic_profile: number[] | null     // 24h curve when live traffic was on
     co2_shadow_chf_per_kg: number
     shift_hours: number
+    shift_start: number
   }
   supply_chain: {
     hq_name: string | null
@@ -118,4 +200,16 @@ export interface FullSummary {
     pharmacy_count: number
     hierarchy: VzStats[]
   }
+  metrics: {
+    avg_stops_per_route: number
+    avg_km_per_route: number
+    cost_per_item_chf: number
+    co2_per_km_kg: number
+    total_driver_hours: number
+    unrouted_pharmacies: number
+    hub_loads: HubLoad[]
+  }
+  fleet_utilization: Record<string, FleetUtilization>
+  individual_routes: IndividualRoute[]
+  individual_backbone_routes: BackboneRoute[]
 }

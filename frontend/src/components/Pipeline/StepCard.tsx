@@ -1,10 +1,10 @@
 import type { StepInfo } from '../../types'
 
-const STEP_META: Record<number, { title: string; desc: string; icon: string }> = {
-  1: { title: 'Hub Placement',     desc: 'VZ & mVZ platzieren',    icon: '◎' },
-  2: { title: 'Einzugsgebiete',    desc: 'Straßenbasierte Zuweisung', icon: '⬡' },
-  3: { title: 'Warenbedarf',       desc: 'Demand pro Apotheke',    icon: '◈' },
-  4: { title: 'Routenoptimierung', desc: 'Fahrzeugrouten + CO₂',   icon: '⬢' },
+const STEP_META: Record<number, { title: string; desc: string }> = {
+  1: { title: 'Warenbedarf',       desc: 'Nachfrage pro Apotheke berechnen'      },
+  2: { title: 'Hub Placement',     desc: 'VZ & mVZ nachfragegewichtet platzieren' },
+  3: { title: 'Einzugsgebiete',    desc: 'Straßenbasierte Zuweisung mit Kapazität' },
+  4: { title: 'Routenoptimierung', desc: 'Fahrzeugrouten & CO2-Optimierung'      },
 }
 
 interface StepCardProps {
@@ -105,7 +105,7 @@ export function StepCard({ step, info, onRun, isLoading, canRun }: StepCardProps
 
             {status === 'error' && info.error_message && (
               <div className="mt-1.5 p-1.5 bg-red-950/50 border border-red-800/40 rounded text-xs text-red-400 line-clamp-2">
-                {info.error_message.split('\n').at(-1) ?? info.error_message}
+                {(info.error_message.split('\n').pop() ?? info.error_message)}
               </div>
             )}
           </div>

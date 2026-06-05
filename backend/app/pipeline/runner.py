@@ -1,3 +1,10 @@
+"""
+Pipeline step order:
+  1 — Warenbedarf         (demand per pharmacy)
+  2 — Hub Placement       (demand-weighted p-median)
+  3 — Einzugsgebiete      (road-based assignment, uses actual demand for capacity)
+  4 — Routenoptimierung   (multi-objective VRP)
+"""
 import logging
 import traceback
 from datetime import datetime
@@ -23,9 +30,28 @@ def _set_status(step: int, status: str, error: str | None = None) -> None:
         db.close()
 
 
+# ── Step 1: Warenbedarf (demand per pharmacy) ─────────────────────────────────
 @celery_app.task(name="run_step_1")
 def run_step_1() -> None:
-    logger.info("=== Step 1: Hub Placement ===")
+    logger.info("=== Step 1: Demand Calculation ===")
+    try:
+        from app.pipeline.a3_demand import run_demand
+
+        db = SessionLocal()
+        try:
+            run_demand(db)
+        finally:
+            db.close()
+        _set_status(1, "done")
+    except Exception:
+        _set_status(1, "error", traceback.format_exc())
+        raise
+
+
+# ── Step 2: Hub Placement (demand-weighted p-median) ──────────────────────────
+@celery_app.task(name="run_step_2")
+def run_step_2() -> None:
+    logger.info("=== Step 2: Hub Placement (demand-weighted) ===")
     try:
         from app.pipeline.a1_hub_placement import run_hub_placement
 
@@ -35,15 +61,16 @@ def run_step_1() -> None:
             run_hub_placement(pharmacies, db)
         finally:
             db.close()
-        _set_status(1, "done")
+        _set_status(2, "done")
     except Exception:
-        _set_status(1, "error", traceback.format_exc())
+        _set_status(2, "error", traceback.format_exc())
         raise
 
 
-@celery_app.task(name="run_step_2")
-def run_step_2() -> None:
-    logger.info("=== Step 2: Influence / Road Assignment ===")
+# ── Step 3: Einzugsgebiete (road-based assignment, uses actual demand) ─────────
+@celery_app.task(name="run_step_3")
+def run_step_3() -> None:
+    logger.info("=== Step 3: Influence / Road Assignment ===")
     try:
         from app.pipeline.a2_influence import run_influence
 
@@ -54,29 +81,13 @@ def run_step_2() -> None:
             run_influence(pharmacies, hubs, db)
         finally:
             db.close()
-        _set_status(2, "done")
-    except Exception:
-        _set_status(2, "error", traceback.format_exc())
-        raise
-
-
-@celery_app.task(name="run_step_3")
-def run_step_3() -> None:
-    logger.info("=== Step 3: Demand Calculation ===")
-    try:
-        from app.pipeline.a3_demand import run_demand
-
-        db = SessionLocal()
-        try:
-            run_demand(db)
-        finally:
-            db.close()
         _set_status(3, "done")
     except Exception:
         _set_status(3, "error", traceback.format_exc())
         raise
 
 
+# ── Step 4: Routenoptimierung (VRP) ───────────────────────────────────────────
 @celery_app.task(name="run_step_4")
 def run_step_4() -> None:
     logger.info("=== Step 4: Route Optimisation ===")

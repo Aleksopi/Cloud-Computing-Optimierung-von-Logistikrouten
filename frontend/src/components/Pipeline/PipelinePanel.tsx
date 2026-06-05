@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { StepCard } from './StepCard'
+import { TrafficToggle } from './TrafficToggle'
 import { api } from '../../api/client'
 import type { PipelineStatus, Summary } from '../../types'
 
@@ -63,14 +64,17 @@ export function PipelinePanel({ status, onRunStep, onReset, loading, error }: Pi
       {/* ── Step cards ─────────────────────────────────────────────────── */}
       <div className="flex-1 overflow-y-auto px-3 py-3 space-y-0">
         {[1, 2, 3, 4].map(step => (
-          <StepCard
-            key={step}
-            step={step}
-            info={status[step] ?? { status: 'idle', started_at: null, finished_at: null, error_message: null }}
-            onRun={() => onRunStep(step)}
-            isLoading={loading === step}
-            canRun={canRun(step)}
-          />
+          <div key={step}>
+            <StepCard
+              step={step}
+              info={status[step] ?? { status: 'idle', started_at: null, finished_at: null, error_message: null }}
+              onRun={() => onRunStep(step)}
+              isLoading={loading === step}
+              canRun={canRun(step)}
+            />
+            {/* Traffic-model (simulation) switch attached to the Routenoptimierung card */}
+            {step === 4 && <TrafficToggle step4Done={status[4]?.status === 'done'} />}
+          </div>
         ))}
       </div>
 
