@@ -45,6 +45,39 @@ def osrm_table(sources: list[tuple], destinations: list[tuple]) -> tuple[np.ndar
     return dist_m / 1000.0, time_s / 3600.0
 
 
+def osrm_distance_matrix(points: list[tuple]) -> np.ndarray | None:
+    """
+    Full road-network distance matrix (km) between all `points` [(lat, lon), ...].
+
+    Issues a single OSRM /table request over all points (≤ max-table-size).
+    Unreachable pairs come back as NaN. Returns None on any failure so the
+    caller can fall back to straight-line distances.
+    """
+    n = len(points)
+    if n < 2:
+        return np.zeros((n, n), dtype=np.float64)
+
+    url = (
+        f"{settings.osrm_url}/table/v1/driving/{_lonlat(points)}"
+        f"?annotations=distance"
+    )
+    try:
+        r = requests.get(url, timeout=120)
+        r.raise_for_status()
+        raw = r.json().get("distances")
+        if raw is None:
+            return None
+        # OSRM returns null for unreachable pairs → NaN (handled by caller)
+        dist_m = np.array(
+            [[np.nan if v is None else v for v in row] for row in raw],
+            dtype=np.float64,
+        )
+        return dist_m / 1000.0
+    except Exception as e:
+        logger.warning(f"OSRM distance matrix failed ({e}), caller will fall back")
+        return None
+
+
 def osrm_geometry(origin: tuple, destination: tuple) -> list[list[float]]:
     """
     Returns [[lon, lat], ...] for the driving route. Falls back to straight line on error.

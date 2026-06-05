@@ -2,6 +2,10 @@
 Step 4 — Route Optimisation (last-mile + backbone)
 Fully DB-driven, multi-objective greedy VRP (cost + time + CO₂).
 
+Distances are **road-network distances** from OSRM (one /table call per depot),
+not straight-line Haversine — these km drive stop selection, range, time, cost
+and CO₂. Haversine is only a fallback when OSRM is unavailable.
+
 Last-mile (Hub → Apotheke): vehicles with can_last_mile=True, small-first.
 Backbone  (HQ → VZ, VZ → mVZ): vehicles with can_backbone=True, large-first.
 Every vehicle performs a multi-stop tour (depot → stop → stop → … → depot).
@@ -17,6 +21,7 @@ import requests as _http
 
 from app.config import settings
 from app.db.models import Assignment, Hub, Pharmacy, SystemConfig, VehicleFleetConfig, VehicleRoute
+from app.services.osrm import osrm_distance_matrix
 from app.services.traffic import effective_factor
 
 logger = logging.getLogger(__name__)
@@ -38,13 +43,29 @@ def _road_geometry(waypoints: list[list[float]]) -> list[list[float]]:
         return waypoints
 
 
-def _hav(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
-    R = 6371.0
-    dlat = np.radians(lat2 - lat1)
-    dlon = np.radians(lon2 - lon1)
-    a = (np.sin(dlat / 2) ** 2
-         + np.cos(np.radians(lat1)) * np.cos(np.radians(lat2)) * np.sin(dlon / 2) ** 2)
-    return float(R * 2 * np.arcsin(np.sqrt(np.clip(a, 0.0, 1.0))))
+def _hav_matrix(nodes: list[tuple[float, float]]) -> np.ndarray:
+    """Vectorised Haversine distance matrix (km) — straight-line fallback."""
+    lat = np.radians(np.array([n[0] for n in nodes], dtype=np.float64))
+    lon = np.radians(np.array([n[1] for n in nodes], dtype=np.float64))
+    dlat = lat[:, None] - lat[None, :]
+    dlon = lon[:, None] - lon[None, :]
+    a = np.sin(dlat / 2) ** 2 + np.cos(lat[:, None]) * np.cos(lat[None, :]) * np.sin(dlon / 2) ** 2
+    return 6371.0 * 2 * np.arcsin(np.sqrt(np.clip(a, 0.0, 1.0)))
+
+
+def _road_matrix(nodes: list[tuple[float, float]]) -> np.ndarray:
+    """Road-network distance matrix (km) over [depot, stop_1, …, stop_n].
+
+    Uses OSRM; falls back to Haversine entirely when OSRM is unavailable, and
+    patches individual unreachable pairs with their straight-line distance."""
+    hv = _hav_matrix(nodes)
+    road = osrm_distance_matrix(nodes)
+    if road is None or road.shape != hv.shape:
+        return hv
+    if not np.isfinite(road).all():
+        road = np.where(np.isfinite(road), road, hv)
+    np.fill_diagonal(road, 0.0)
+    return road
 
 
 def _composite_score(d_km, cost_per_km, co2_g_per_km, speed_kmh, driver_chf_h, service_min, opt):
@@ -67,9 +88,18 @@ def _solve_vrp(
     opt: dict,
 ) -> list[dict]:
     """Greedy nearest-neighbour VRP. Deploys each vehicle type up to max_per_hub.
-    Each vehicle drives a multi-stop tour minimising the composite score."""
+    Each vehicle drives a multi-stop tour minimising the composite score.
+
+    Distances come from a road-network matrix over [depot, stop_1, …, stop_n];
+    every stop carries its matrix index in ``_node`` (depot = 0)."""
     routes: list[dict] = []
     remaining = list(stops)
+
+    # Road-network distance matrix (km) over depot + all stops; depot is node 0.
+    nodes = [(depot_lat, depot_lon)] + [(s["lat"], s["lon"]) for s in stops]
+    dmat = _road_matrix(nodes)
+    for k, s in enumerate(stops, start=1):
+        s["_node"] = k
 
     for vconf in vehicles:
         if not remaining:
@@ -95,15 +125,15 @@ def _solve_vrp(
             km_used = hours_used = total_co2_g = 0.0
             total_items  = 0
             restock_done = 0
-            cur_lat, cur_lon = depot_lat, depot_lon
+            cur_idx = 0  # start at the depot (matrix node 0)
 
             while remaining:
                 best_idx, best_score, best_d = None, np.inf, 0.0
                 for idx, stop in enumerate(remaining):
                     if stop["demand"] > items_loaded:
                         continue
-                    d_to   = _hav(cur_lat, cur_lon, stop["lat"], stop["lon"])
-                    d_back = _hav(stop["lat"], stop["lon"], depot_lat, depot_lon)
+                    d_to   = float(dmat[cur_idx, stop["_node"]])    # road km here→stop
+                    d_back = float(dmat[stop["_node"], 0])          # road km stop→depot
                     if km_used + d_to + d_back > range_km:
                         continue
                     drive_h = (d_to / speed) * opt["traffic_factor"]
@@ -133,10 +163,10 @@ def _solve_vrp(
                 km_used      += best_d
                 total_co2_g  += best_d * co2_g_km
                 hours_used   += drive_h + svc_min / 60.0
-                cur_lat, cur_lon = stop["lat"], stop["lon"]
+                cur_idx       = stop["_node"]
 
             if route_ids:
-                d_ret        = _hav(cur_lat, cur_lon, depot_lat, depot_lon)
+                d_ret        = float(dmat[cur_idx, 0])   # road km back to depot
                 km_used     += d_ret
                 total_co2_g += d_ret * co2_g_km
                 stop_coords.append([depot_lon, depot_lat])
