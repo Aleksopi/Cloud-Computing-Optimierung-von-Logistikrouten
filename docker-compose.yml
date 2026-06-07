@@ -51,6 +51,7 @@ services:
       HQ_NAME: "HQ_Bern"
       DATA_DIR: /app/data
       TZ: Europe/Zurich   # live-traffic model uses local Swiss time-of-day
+      TOMTOM_API_KEY: ${TOMTOM_API_KEY:-}   # optional; file key wins over website key
     ports:
       - "8000:8000"
     volumes:
@@ -77,6 +78,7 @@ services:
       HQ_NAME: "HQ_Bern"
       DATA_DIR: /app/data
       TZ: Europe/Zurich   # live-traffic model uses local Swiss time-of-day
+      TOMTOM_API_KEY: ${TOMTOM_API_KEY:-}   # optional; file key wins over website key
     volumes:
       - ./backend/data:/app/data
       - ./backend/app:/app/app

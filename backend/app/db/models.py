@@ -63,6 +63,10 @@ class VehicleRoute(Base):
     restock_count = Column(Integer, default=0)
     supply_tier = Column(String, nullable=True)     # "last_mile" or "backbone"
     co2_kg = Column(Float, nullable=True)           # kg CO2 for this route
+    # Traffic context applied to this route (Step 4)
+    traffic_factor = Column(Float, nullable=True)   # realised drive-time multiplier vs free flow
+    traffic_source = Column(String, nullable=True)  # "tomtom" | "simulation" | "static"
+    free_flow_hours = Column(Float, nullable=True)  # drive hours without any congestion
 
 
 class PipelineRun(Base):

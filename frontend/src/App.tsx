@@ -123,29 +123,32 @@ export default function App() {
   const activeHubForHighlight = focusedHub ?? (selected?.type === 'hub' ? (selected.properties.name as string) : null)
 
   const highlight: HighlightState | null = useMemo(() => {
+    const base = { hubs: [] as string[], pharmacyId: null, servingPharmacyId: null, routeId: null, vehicleId: null, primaryHub: null }
     if (focusedVehicleId) {
       // Use stored hub name — never derive from vehicle_id string (split would mangle "VZ_1")
-      return { hubs: focusedVehicleHub ? chainOf(focusedVehicleHub) : [], pharmacyId: null, routeId: null, vehicleId: focusedVehicleId, primaryHub: null }
+      return { ...base, hubs: focusedVehicleHub ? chainOf(focusedVehicleHub) : [], vehicleId: focusedVehicleId }
     }
     if (focusedPharmacyId != null) {
-      return { hubs: focusedPharmacyHub ? chainOf(focusedPharmacyHub) : [], pharmacyId: focusedPharmacyId, routeId: null, vehicleId: null, primaryHub: null }
+      // "Lieferkette anzeigen" button → full upstream chain (assignment + backbone)
+      return { ...base, hubs: focusedPharmacyHub ? chainOf(focusedPharmacyHub) : [], pharmacyId: focusedPharmacyId }
     }
     if (activeHubForHighlight) {
       // Pure hub focus → colour the hub's own (outbound) routes vs its inbound supply route
-      return { hubs: chainOf(activeHubForHighlight), pharmacyId: null, routeId: null, vehicleId: null, primaryHub: activeHubForHighlight }
+      return { ...base, hubs: chainOf(activeHubForHighlight), primaryHub: activeHubForHighlight }
     }
     if (selected?.type === 'pharmacy') {
+      // Plain pharmacy click → show only the last-mile route that delivers it
       const p = selected.properties as any
-      return { hubs: p.hub_name ? chainOf(p.hub_name) : [], pharmacyId: (p.id as number) ?? null, routeId: null, vehicleId: null, primaryHub: null }
+      return { ...base, hubs: p.hub_name ? [p.hub_name] : [], servingPharmacyId: (p.id as number) ?? null }
     }
     if (selected?.type === 'route') {
       const p = selected.properties as any
       if (p.backbone_tier) {
         let to: string[] = []
         try { to = typeof p.to_hubs === 'string' ? JSON.parse(p.to_hubs) : (p.to_hubs ?? []) } catch { /* */ }
-        return { hubs: [p.from_hub, ...to].filter(Boolean), pharmacyId: null, routeId: null, vehicleId: null, primaryHub: null }
+        return { ...base, hubs: [p.from_hub, ...to].filter(Boolean) }
       }
-      return { hubs: p.hub_name ? [p.hub_name] : [], pharmacyId: null, routeId: p.id ?? null, vehicleId: null, primaryHub: null }
+      return { ...base, hubs: p.hub_name ? [p.hub_name] : [], routeId: p.id ?? null }
     }
     return null
   }, [selected, focusedHub, focusedVehicleId, focusedPharmacyId, hubMap])

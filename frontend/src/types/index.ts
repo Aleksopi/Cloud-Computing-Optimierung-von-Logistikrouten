@@ -17,11 +17,14 @@ export interface SelectedFeature {
 /** Drives map dimming: only related features stay opaque. */
 export interface HighlightState {
   hubs: string[]              // relevant hub names (the chain)
-  pharmacyId: number | null   // highlight a single assignment line
+  pharmacyId: number | null   // highlight a single assignment line (supply-chain view)
+  servingPharmacyId: number | null // show only the last-mile route delivering this pharmacy
   routeId: number | null      // highlight a single vehicle route (numeric id)
   vehicleId: string | null    // highlight/filter a single vehicle_id string
   primaryHub: string | null   // clicked hub → colour its outbound vs inbound supply distinctly
 }
+
+export type TrafficSource = 'tomtom' | 'simulation' | 'static'
 
 export interface RouteSummary {
   id: number
@@ -33,8 +36,13 @@ export interface RouteSummary {
   total_items: number
   total_cost_chf: number
   co2_kg: number | null
+  stops?: number[]
   stop_count: number
   restock_count: number
+  traffic_factor?: number | null
+  traffic_source?: TrafficSource | null
+  free_flow_hours?: number | null
+  traffic_delay_min?: number | null
 }
 
 export interface Summary {
@@ -85,13 +93,22 @@ export interface SystemConfigEntry {
 
 export interface TrafficInfo {
   enabled:            boolean
+  mode:               'simulation' | 'tomtom'    // configured data source
+  source:             TrafficSource              // what was actually applied
   peak_intensity:     number
   static_factor:      number   // factor applied when live traffic is OFF
   effective_factor:   number   // factor Step 4 actually applies
-  current_congestion: number   // modelled multiplier for the current time of day (simulated)
+  current_congestion: number   // multiplier for the current moment (simulated or live)
   shift_start:        number
   shift_hours:        number
-  profile:            number[] // 24 hourly congestion multipliers
+  profile:            number[] // 24 hourly congestion multipliers (simulation)
+}
+
+export interface TomTomConfig {
+  mode:       'simulation' | 'tomtom'
+  key_source: 'file' | 'db' | 'none'
+  key_masked: string
+  can_edit:   boolean          // false when a .env key takes precedence
 }
 
 // ── Analytics Dashboard ───────────────────────────────────────────────────────
@@ -138,6 +155,9 @@ export interface IndividualRoute {
   total_cost_chf: number
   co2_kg:        number
   restock_count: number
+  traffic_factor?:    number | null
+  traffic_source?:    TrafficSource | null
+  traffic_delay_min?: number | null
 }
 
 export interface HubLoad {
@@ -173,6 +193,7 @@ export interface FullSummary {
     pharmacies_total: number
     pharmacies_assigned: number
     hubs_total: number
+    traffic_total_delay_min?: number
   }
   fleet_by_type: Record<string, FleetStats>
   backbone_by_type: Record<string, FleetStats>
@@ -186,6 +207,8 @@ export interface FullSummary {
     traffic_factor: number               // factor actually applied by Step 4
     static_traffic_factor: number
     live_traffic_enabled: boolean
+    traffic_mode: 'simulation' | 'tomtom'
+    traffic_source: TrafficSource
     traffic_peak_intensity: number
     effective_traffic_factor: number
     traffic_profile: number[] | null     // 24h curve when live traffic was on

@@ -54,6 +54,7 @@ export function TrafficToggle({ step4Done, onChanged }: Props) {
   }
 
   const on   = !!info?.enabled
+  const live = info?.source === 'tomtom'
   const cong = info?.current_congestion ?? 1
   const eff  = info?.effective_factor ?? 1
 
@@ -68,12 +69,16 @@ export function TrafficToggle({ step4Done, onChanged }: Props) {
           <div className="flex items-center gap-1.5">
             <span className={`text-xs font-semibold ${on ? 'text-amber-200' : 'text-slate-300'}`}>Verkehrsmodell</span>
             {on && (
-              <span className="text-[9px] font-semibold text-amber-300/90 bg-amber-950/50 border border-amber-800/50 rounded px-1 py-px">
-                SIM
+              <span className={`text-[9px] font-semibold rounded px-1 py-px border ${
+                live ? 'text-emerald-300 bg-emerald-950/50 border-emerald-800/50'
+                     : 'text-amber-300/90 bg-amber-950/50 border-amber-800/50'}`}>
+                {live ? 'LIVE' : 'SIM'}
               </span>
             )}
           </div>
-          <span className="text-[10px] text-slate-500">Tageszeit-Simulation · Schritt 4</span>
+          <span className="text-[10px] text-slate-500">
+            {live ? 'TomTom Traffic · Schritt 4' : 'Tageszeit-Simulation · Schritt 4'}
+          </span>
         </div>
 
         {/* Switch */}

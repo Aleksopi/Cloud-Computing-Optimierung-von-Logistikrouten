@@ -9,7 +9,8 @@ from pydantic import BaseModel
 
 from app.db.models import SystemConfig, VehicleFleetConfig
 from app.db.session import SessionLocal
-from app.services.traffic import current_congestion, effective_factor, hourly_profile
+from app.services import tomtom
+from app.services.traffic import resolve as traffic_resolve
 
 router = APIRouter()
 
@@ -40,9 +41,16 @@ class SystemConfigBody(BaseModel):
 
 
 class TrafficBody(BaseModel):
-    """Toggle live traffic and (optionally) tune its peak intensity."""
+    """Toggle live traffic and (optionally) tune its peak intensity / data source."""
     enabled: bool
     peak_intensity: float | None = None
+    mode: str | None = None            # "simulation" | "tomtom"
+
+
+class TomTomBody(BaseModel):
+    """Set the TomTom API key (website) and/or the traffic data source mode."""
+    api_key: str | None = None
+    mode: str | None = None            # "simulation" | "tomtom"
 
 
 # ── Vehicle endpoints ─────────────────────────────────────────────────────────
@@ -146,10 +154,52 @@ def update_traffic(body: TrafficBody):
         _upsert(db, "live_traffic_enabled", "1" if body.enabled else "0")
         if body.peak_intensity is not None:
             _upsert(db, "traffic_peak_intensity", str(round(max(0.0, body.peak_intensity), 2)))
+        if body.mode in ("simulation", "tomtom"):
+            _upsert(db, "traffic_mode", body.mode)
         db.commit()
         return _traffic_payload({c.key: c.value for c in db.query(SystemConfig).all()})
     finally:
         db.close()
+
+
+# ── TomTom API key + data-source mode ─────────────────────────────────────────
+
+def _tomtom_payload() -> dict:
+    db = SessionLocal()
+    try:
+        raw = {c.key: c.value for c in db.query(SystemConfig).all()}
+    finally:
+        db.close()
+    db_key = raw.get("tomtom_api_key") or ""
+    src = tomtom.key_source(db_key)        # "file" | "db" | "none"
+    return {
+        "mode":       (raw.get("traffic_mode") or "simulation"),
+        "key_source": src,
+        "key_masked": tomtom.mask(tomtom.resolve_key(db_key)),
+        "can_edit":   src != "file",       # file (.env) key wins → website entry locked
+    }
+
+
+@router.get("/tomtom")
+def get_tomtom():
+    return _tomtom_payload()
+
+
+@router.put("/tomtom")
+def update_tomtom(body: TomTomBody):
+    db = SessionLocal()
+    try:
+        raw = {c.key: c.value for c in db.query(SystemConfig).all()}
+        file_key = tomtom.key_source(raw.get("tomtom_api_key")) == "file"
+        if body.mode in ("simulation", "tomtom"):
+            _upsert(db, "traffic_mode", body.mode)
+        # Respect file precedence: ignore website key when a .env key exists.
+        if body.api_key is not None and not file_key:
+            _upsert(db, "tomtom_api_key", body.api_key.strip())
+        db.commit()
+    finally:
+        db.close()
+    return _tomtom_payload()
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -163,30 +213,9 @@ def _upsert(db, key: str, value: str) -> None:
 
 
 def _traffic_payload(raw: dict[str, str]) -> dict:
-    def _f(key: str, default: float) -> float:
-        try:
-            return float(raw.get(key, default))
-        except (TypeError, ValueError):
-            return default
-
-    enabled       = _f("live_traffic_enabled", 0.0) >= 0.5
-    peak          = _f("traffic_peak_intensity", 1.0)
-    static_factor = _f("traffic_factor", 1.0)
-    shift_start   = _f("shift_start", 8.0)
-    shift_hours   = _f("shift_hours", 8.0)
-    return {
-        "enabled":            enabled,
-        "peak_intensity":     round(peak, 2),
-        "static_factor":      round(static_factor, 3),
-        "effective_factor":   effective_factor(
-            enabled=enabled, static_factor=static_factor,
-            shift_start=shift_start, shift_hours=shift_hours, peak_intensity=peak,
-        ),
-        "current_congestion": current_congestion(peak),
-        "shift_start":        shift_start,
-        "shift_hours":        shift_hours,
-        "profile":            hourly_profile(peak),
-    }
+    """Traffic context for the UI — delegates to the central resolver
+    (simulation ↔ TomTom). Adds `mode` + `source` on top of the legacy shape."""
+    return traffic_resolve(raw)
 
 
 def _vehicle_dict(v: VehicleFleetConfig) -> dict:

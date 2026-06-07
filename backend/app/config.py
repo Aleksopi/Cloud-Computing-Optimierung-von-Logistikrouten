@@ -10,6 +10,10 @@ class Settings(BaseSettings):
     hq_name: str = "HQ_Bern"
     data_dir: str = "/app/data"
 
+    # TomTom Traffic API — empty = no file key (falls back to DB key / simulation).
+    # When set here (via .env), this takes precedence over any website-entered key.
+    tomtom_api_key: str = ""
+
     model_config = {"env_file": ".env"}
 
 

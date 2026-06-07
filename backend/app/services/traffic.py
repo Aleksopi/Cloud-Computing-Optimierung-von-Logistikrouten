@@ -22,6 +22,8 @@ from __future__ import annotations
 
 from datetime import datetime
 
+from app.services import tomtom
+
 # Relative congestion multiplier on free-flow travel time, indexed by clock hour.
 # Calibrated to a typical Swiss weekday commuter pattern — two rush-hour peaks.
 _HOURLY: dict[int, float] = {
@@ -84,3 +86,55 @@ def current_congestion(peak_intensity: float = 1.0, now: datetime | None = None)
 def hourly_profile(peak_intensity: float = 1.0) -> list[float]:
     """24 hourly congestion multipliers — for plotting the daily curve."""
     return [round(congestion_at(float(h), peak_intensity), 3) for h in range(24)]
+
+
+# ── Central resolver (simulation ↔ TomTom live) ─────────────────────────────────
+
+def resolve(sys_raw: dict[str, str]) -> dict:
+    """Single source of truth for the traffic context used across Step 4, the
+    results API and the settings API.
+
+    Resolves the effective traffic factor depending on the configured mode:
+
+    * model OFF                     → static ``traffic_factor`` (source="static")
+    * model ON, mode "tomtom" + key → live TomTom flow factor (source="tomtom"),
+      falling back to the simulation when the API is unavailable
+    * model ON, mode "simulation"   → shift-averaged simulation (source="simulation")
+    """
+    def _f(key: str, default: float) -> float:
+        try:
+            return float(sys_raw.get(key, default))
+        except (TypeError, ValueError):
+            return default
+
+    enabled       = _f("live_traffic_enabled", 0.0) >= 0.5
+    mode          = (sys_raw.get("traffic_mode") or "simulation").strip().lower()
+    peak          = _f("traffic_peak_intensity", 1.0)
+    static_factor = _f("traffic_factor", 1.0)
+    shift_start   = _f("shift_start", 8.0)
+    shift_hours   = _f("shift_hours", 8.0)
+    key           = tomtom.resolve_key(sys_raw.get("tomtom_api_key"))
+
+    if not enabled:
+        eff, source, cong = round(static_factor, 3), "static", round(static_factor, 3)
+    else:
+        live = tomtom.flow_congestion_factor(key) if mode == "tomtom" else None
+        if live is not None:
+            eff, source, cong = live, "tomtom", live
+        else:
+            eff = round(shift_average(shift_start, shift_hours, peak), 3)
+            cong = current_congestion(peak)
+            source = "simulation"
+
+    return {
+        "enabled":            enabled,
+        "mode":               mode,
+        "source":             source,
+        "effective_factor":   eff,
+        "current_congestion": cong,
+        "peak_intensity":     round(peak, 2),
+        "static_factor":      round(static_factor, 3),
+        "shift_start":        shift_start,
+        "shift_hours":        shift_hours,
+        "profile":            hourly_profile(peak),
+    }
