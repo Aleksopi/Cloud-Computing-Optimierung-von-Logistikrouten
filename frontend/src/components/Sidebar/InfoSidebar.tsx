@@ -164,7 +164,7 @@ export function InfoSidebar({
             <div className="border-t border-slate-700/60 pt-2 mt-1 space-y-1.5">
               <Row label="Waren"   value={`${p.total_items} Einh.`} />
               <Row label="Strecke" value={`${p.total_km} km`} />
-              <Row label="Zeit"    value={`${(p.total_hours as number).toFixed(1)} h`} />
+              <EtaBlock p={p} />
               <Row label="Kosten"  value={`CHF ${(p.total_cost_chf as number).toLocaleString('de-CH')}`} hl />
               {p.co2_kg != null && <Row label="CO2" value={`${p.co2_kg} kg`} />}
             </div>
@@ -180,7 +180,7 @@ export function InfoSidebar({
               <Row label="Stops"    value={`${p.stop_count}`} />
               <Row label="Waren"    value={`${p.total_items} Einh.`} />
               <Row label="Strecke"  value={`${p.total_km} km`} />
-              <Row label="Fahrzeit" value={`${(p.total_hours as number).toFixed(1)} h`} />
+              <EtaBlock p={p} />
               <Row label="Kosten"   value={`CHF ${(p.total_cost_chf as number).toLocaleString('de-CH')}`} hl />
               {p.co2_kg != null && <Row label="CO2" value={`${p.co2_kg} kg`} />}
               {(p.restock_count as number) > 0 && <Row label="Restock" value={`${p.restock_count}×`} />}
@@ -194,6 +194,37 @@ export function InfoSidebar({
 
 function hubLabel(t: string) {
   return t === 'HQ' ? 'Hauptquartier' : t === 'VZ' ? 'Verteilzentrum' : 'Mini-Verteilzentrum'
+}
+
+/** Estimated travel time for a route, with traffic source + congestion delay. */
+function EtaBlock({ p }: { p: Record<string, any> }) {
+  if (p.total_hours == null) return null
+  const src   = p.traffic_source as string | undefined
+  const delay = typeof p.traffic_delay_min === 'number' ? p.traffic_delay_min : null
+  const live  = src === 'tomtom'
+  return (
+    <>
+      <div className="flex items-baseline justify-between gap-3">
+        <span className="text-slate-500 text-xs flex-shrink-0">Geschätzte Fahrzeit</span>
+        <span className="text-xs text-right font-semibold text-slate-100 flex items-center gap-1.5 justify-end">
+          {(p.total_hours as number).toFixed(1)} h
+          {live && (
+            <span className="text-[9px] font-semibold text-emerald-300 bg-emerald-950/50 border border-emerald-800/50 rounded px-1 py-px">
+              LIVE
+            </span>
+          )}
+          {src === 'simulation' && (
+            <span className="text-[9px] font-semibold text-amber-300 bg-amber-950/50 border border-amber-800/50 rounded px-1 py-px">
+              SIM
+            </span>
+          )}
+        </span>
+      </div>
+      {delay != null && delay >= 1 && (
+        <Row label="davon Stau" value={`+${Math.round(delay)} min`} />
+      )}
+    </>
+  )
 }
 
 function Row({ label, value, hl }: { label: string; value: string; hl?: boolean }) {

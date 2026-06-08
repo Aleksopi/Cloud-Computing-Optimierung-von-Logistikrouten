@@ -17,6 +17,7 @@ const TABS = [
   { id: 'vehicles',    label: 'Last Mile'    },
   { id: 'backbone',    label: 'Hauptlauf'    },
   { id: 'hubs',        label: 'Hubs'         },
+  { id: 'traffic',     label: 'Verkehr'      },
   { id: 'environment', label: 'CO2 & Umwelt' },
 ] as const
 type TabId = typeof TABS[number]['id']
@@ -94,6 +95,7 @@ export function SummaryPage({ pipelineStatus }: SummaryPageProps) {
         {tab === 'vehicles'    && <VehiclesTab    deliverySpecs={deliverySpecs} routesByType={routesByType} fleetUtil={fleet_utilization} />}
         {tab === 'backbone'    && <BackboneTab    data={data} />}
         {tab === 'hubs'        && <HubsTab        data={data} />}
+        {tab === 'traffic'     && <TrafficTab     data={data} />}
         {tab === 'environment' && <EnvironmentTab data={data} deliverySpecs={deliverySpecs} co2Saved={co2Saved} />}
       </div>
     </div>
@@ -123,6 +125,34 @@ function OverviewTab({ data, co2Saved }: { data: FullSummary; co2Saved: number }
 
       {/* Traffic & optimisation context */}
       <TrafficContextCard optimization={optimization} />
+
+      {/* Cost breakdown: transport vs. warehouse */}
+      <Card title="Kostenaufteilung" sub="Transport vs. Lager (gesamt)">
+        {(() => {
+          const transport = overview.total_cost_chf
+          const wh        = overview.warehouse_cost_chf
+          const total     = Math.max(1, transport + wh)
+          return (
+            <>
+              <div className="flex h-6 rounded-lg overflow-hidden border border-slate-700/60">
+                <div className="flex items-center justify-center text-[10px] font-semibold text-white/90"
+                     style={{ width: `${transport / total * 100}%`, backgroundColor: '#3b82f6' }}>
+                  {Math.round(transport / total * 100)}%
+                </div>
+                <div className="flex items-center justify-center text-[10px] font-semibold text-white/90"
+                     style={{ width: `${wh / total * 100}%`, backgroundColor: '#f59e0b' }}>
+                  {Math.round(wh / total * 100)}%
+                </div>
+              </div>
+              <div className="flex flex-wrap gap-4 mt-2 text-xs">
+                <span className="flex items-center gap-1.5 text-slate-400"><span className="w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: '#3b82f6' }} />Transport CHF {fmt(transport, 0)}</span>
+                <span className="flex items-center gap-1.5 text-slate-400"><span className="w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: '#f59e0b' }} />Lager CHF {fmt(wh, 0)}</span>
+                <span className="text-slate-500">Gesamt CHF {fmt(overview.total_cost_incl_warehouse_chf, 0)}</span>
+              </div>
+            </>
+          )
+        })()}
+      </Card>
 
       {/* Fleet summary + utilization */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -516,6 +546,101 @@ function EnvironmentTab({ data, deliverySpecs, co2Saved }: {
 }
 
 /* ══════════════════════════════════════════════════════════════════════════
+   TAB: Verkehr (traffic impact)
+══════════════════════════════════════════════════════════════════════════ */
+const SRC_META: Record<string, { label: string; color: string }> = {
+  tomtom:       { label: 'TomTom Live',                color: '#34d399' },
+  tomtom_error: { label: 'TomTom-Fehler → Freifluss', color: '#f87171' },
+  tomtom_nokey: { label: 'Kein Key → Freifluss',      color: '#fbbf24' },
+  simulation:   { label: 'Simulation',                color: '#fbbf24' },
+  static:       { label: 'Statisch',                  color: '#94a3b8' },
+}
+
+function TrafficTab({ data }: { data: FullSummary }) {
+  const t  = data.traffic
+  const sm = SRC_META[t.source] ?? SRC_META.static
+  const byType   = Object.entries(t.by_type)
+  const maxDelay = Math.max(1, ...byType.map(([, s]) => s.total_delay_min))
+  const affected = [...data.individual_routes]
+    .filter(r => (r.traffic_delay_min ?? 0) > 0)
+    .sort((a, b) => (b.traffic_delay_min ?? 0) - (a.traffic_delay_min ?? 0))
+    .slice(0, 10)
+
+  return (
+    <div className="max-w-5xl mx-auto px-6 py-6 space-y-6">
+      {(t.error || t.last_error) && (
+        <div className="rounded-xl border border-red-800/50 bg-red-950/30 px-4 py-3 text-sm text-red-300 flex items-start gap-2">
+          <span className="flex-shrink-0">⚠</span>
+          <span><strong>TomTom:</strong> {t.error || t.last_error} — Routen mit Freifluss-Zeiten berechnet.</span>
+        </div>
+      )}
+
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <div className="rounded-xl border p-4 border-slate-700/50 bg-slate-900/60">
+          <p className="text-xs text-slate-500 mb-1">Datenquelle</p>
+          <p className="text-lg font-bold" style={{ color: sm.color }}>{sm.label}</p>
+          <p className="text-xs text-slate-600 mt-1">Modus: {t.mode === 'tomtom' ? 'TomTom' : 'Simulation'}</p>
+        </div>
+        <KpiCard accent="amber"  label="Ø Verkehrsfaktor"  main={`×${t.effective_factor.toFixed(2)}`} sub={`${asDelay(t.effective_factor)} Fahrzeit`} />
+        <KpiCard accent="blue"   label="Mehrzeit gesamt"   main={`${fmt(t.total_delay_min, 0)} min`} sub="durch Verkehr/Stau" />
+        <KpiCard accent="violet" label="Betroffene Routen" main={`${affected.length}`} sub="mit Mehrzeit > 0" />
+      </div>
+
+      <Card title="Mehrzeit je Fahrzeugtyp" sub="zusätzliche Fahrminuten durch Verkehr + Ø-Faktor">
+        {byType.length === 0 ? <p className="text-xs text-slate-500">Keine Daten.</p> : (
+          <div className="space-y-3">
+            {byType.map(([vt, s], i) => (
+              <div key={vt}>
+                <div className="flex justify-between text-xs mb-1">
+                  <span className="text-slate-300 flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full" style={{ backgroundColor: VCOL(vt, i) }} />
+                    {vt} <span className="text-slate-600">×{s.avg_factor.toFixed(2)}</span>
+                  </span>
+                  <span className="text-slate-400">{fmt(s.total_delay_min, 0)} min · {s.routes} Routen</span>
+                </div>
+                <div className="h-2.5 bg-slate-800 rounded-full overflow-hidden">
+                  <div className="h-full rounded-full" style={{ width: `${(s.total_delay_min / maxDelay) * 100}%`, backgroundColor: VCOL(vt, i) }} />
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </Card>
+
+      <Card title="Am stärksten betroffene Routen" sub="Top 10 nach Verkehrs-Mehrzeit">
+        {affected.length === 0 ? (
+          <p className="text-xs text-slate-500">Keine Routen mit Verkehrsmehrzeit (Modell aus oder Freifluss).</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="text-slate-500 border-b border-slate-800">
+                  {['Fahrzeug-ID', 'Hub', 'Faktor', 'Mehrzeit', 'Strecke', 'Zeit'].map(h => (
+                    <th key={h} className="pb-2 pr-4 text-left font-medium">{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-800/40">
+                {affected.map(r => (
+                  <tr key={r.vehicle_id} className="text-slate-300 hover:bg-slate-800/20">
+                    <td className="py-2 pr-4 font-mono text-slate-300">{r.vehicle_id}</td>
+                    <td className="py-2 pr-4">{r.hub_name}</td>
+                    <td className="py-2 pr-4">×{(r.traffic_factor ?? 1).toFixed(2)}</td>
+                    <td className="py-2 pr-4 text-amber-300 font-medium">+{Math.round(r.traffic_delay_min ?? 0)} min</td>
+                    <td className="py-2 pr-4">{r.total_km} km</td>
+                    <td className="py-2 pr-4">{r.total_hours.toFixed(1)} h</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Card>
+    </div>
+  )
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
    Shared sub-components
 ══════════════════════════════════════════════════════════════════════════ */
 
@@ -560,18 +685,25 @@ const fmtHour   = (h: number) => {
 
 function TrafficContextCard({ optimization }: { optimization: FullSummary['optimization'] }) {
   const on       = optimization.live_traffic_enabled
+  const live     = optimization.traffic_source === 'tomtom'
   const factor   = optimization.effective_traffic_factor ?? optimization.traffic_factor
   const profile  = optimization.traffic_profile
   const shiftEnd = optimization.shift_start + optimization.shift_hours
+  const badge    = live ? 'TomTom Live' : on ? 'Verkehrsmodell aktiv (Sim.)' : 'Statischer Faktor'
 
   return (
-    <div className={`rounded-xl border overflow-hidden ${on ? 'border-amber-700/40 bg-amber-950/10' : 'border-slate-700/60 bg-slate-900/60'}`}>
+    <div className={`rounded-xl border overflow-hidden ${
+      live ? 'border-emerald-700/40 bg-emerald-950/10'
+           : on ? 'border-amber-700/40 bg-amber-950/10' : 'border-slate-700/60 bg-slate-900/60'}`}>
       <div className="flex items-center gap-2.5 px-4 py-3 border-b border-slate-700/40 bg-slate-800/30">
-        <span className={`w-2 h-2 rounded-full ${on ? 'bg-amber-400 animate-pulse' : 'bg-slate-600'}`} />
+        <span className={`w-2 h-2 rounded-full ${
+          live ? 'bg-emerald-400 animate-pulse' : on ? 'bg-amber-400 animate-pulse' : 'bg-slate-600'}`} />
         <span className="text-sm font-semibold text-slate-200">Verkehr &amp; Optimierung</span>
         <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
-          on ? 'bg-amber-900/40 text-amber-300 border border-amber-700/40' : 'bg-slate-800 text-slate-500 border border-slate-700/50'}`}>
-          {on ? 'Verkehrsmodell aktiv (Sim.)' : 'Statischer Faktor'}
+          live ? 'bg-emerald-900/40 text-emerald-300 border border-emerald-700/40'
+               : on ? 'bg-amber-900/40 text-amber-300 border border-amber-700/40'
+                    : 'bg-slate-800 text-slate-500 border border-slate-700/50'}`}>
+          {badge}
         </span>
       </div>
 
@@ -580,8 +712,9 @@ function TrafficContextCard({ optimization }: { optimization: FullSummary['optim
                 color={on ? congColor(factor) : '#94a3b8'} hint={`${asDelay(factor)} Fahrzeit ggü. Freifluss`} />
         <Metric label="Lieferfenster" value={`${fmtHour(optimization.shift_start)}–${fmtHour(shiftEnd)}`}
                 color="#cbd5e1" hint={`${optimization.shift_hours} h Schicht`} />
-        <Metric label="Stau-Intensität" value={on ? `${optimization.traffic_peak_intensity.toFixed(2)}×` : '—'}
-                color="#cbd5e1" hint={on ? 'Modell-Skalierung' : 'inaktiv'} />
+        <Metric label={live ? 'Datenquelle' : 'Stau-Intensität'}
+                value={live ? 'TomTom' : on ? `${optimization.traffic_peak_intensity.toFixed(2)}×` : '—'}
+                color={live ? '#34d399' : '#cbd5e1'} hint={live ? 'Echtzeit-Verkehr' : on ? 'Modell-Skalierung' : 'inaktiv'} />
         <Metric label="CO₂-Schattenpreis" value={`CHF ${optimization.co2_shadow_chf_per_kg.toFixed(2)}`}
                 color="#cbd5e1" hint="pro kg CO₂" />
       </div>
@@ -635,7 +768,9 @@ function VehicleTypeGroup({ type, routes, color }: { type: string; routes: Indiv
     stops: routes.reduce((s, r) => s + r.stop_count,      0),
     hours: routes.reduce((s, r) => s + r.total_hours,     0),
     runs:  routes.reduce((s, r) => s + r.restock_count + 1, 0),
+    delay: routes.reduce((s, r) => s + (r.traffic_delay_min || 0), 0),
   }
+  const trafficSrc = routes.find(r => r.traffic_source)?.traffic_source ?? null
   return (
     <Card title="">
       <button onClick={() => setOpen(o => !o)}
@@ -643,6 +778,14 @@ function VehicleTypeGroup({ type, routes, color }: { type: string; routes: Indiv
         <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: color }} />
         <span className="text-sm font-bold text-slate-200">{type}</span>
         <span className="text-xs text-slate-500">{routes.length} Fahrzeuge · {totals.runs} Läufe gesamt</span>
+        {trafficSrc && (
+          <span className={`text-[9px] font-semibold rounded px-1 py-px border ${
+            trafficSrc === 'tomtom' ? 'text-emerald-300 bg-emerald-950/50 border-emerald-800/50'
+              : trafficSrc === 'simulation' ? 'text-amber-300 bg-amber-950/50 border-amber-800/50'
+              : 'text-slate-400 bg-slate-800 border-slate-700'}`}>
+            {trafficSrc === 'tomtom' ? 'LIVE' : trafficSrc === 'simulation' ? 'SIM' : 'STATIK'}
+          </span>
+        )}
         <div className="ml-auto flex gap-4 text-xs text-slate-500">
           <span>{fmt(totals.km)} km</span><span>CHF {fmt(totals.cost, 0)}</span>
           <span>{fmt(totals.co2)} kg CO2</span>
@@ -654,7 +797,7 @@ function VehicleTypeGroup({ type, routes, color }: { type: string; routes: Indiv
           <table className="w-full text-xs">
             <thead>
               <tr className="text-slate-600 border-b border-slate-800/60">
-                {['Fahrzeug-ID','Hub','Läufe','Stops','Waren','Strecke','Zeit','Kosten','CO2'].map(h => (
+                {['Fahrzeug-ID','Hub','Läufe','Stops','Waren','Strecke','Zeit','Verkehr','Kosten','CO2'].map(h => (
                   <th key={h} className="pb-1.5 pr-3 text-left font-medium">{h}</th>
                 ))}
               </tr>
@@ -669,6 +812,7 @@ function VehicleTypeGroup({ type, routes, color }: { type: string; routes: Indiv
                   <td className="py-1.5 pr-3">{r.total_items}</td>
                   <td className="py-1.5 pr-3">{r.total_km} km</td>
                   <td className="py-1.5 pr-3">{r.total_hours.toFixed(1)} h</td>
+                  <td className="py-1.5 pr-3">{r.traffic_delay_min != null && r.traffic_delay_min >= 1 ? `+${Math.round(r.traffic_delay_min)} min` : '—'}</td>
                   <td className="py-1.5 pr-3 text-slate-200 font-medium">CHF {r.total_cost_chf}</td>
                   <td className="py-1.5">{r.co2_kg} kg</td>
                 </tr>
@@ -680,6 +824,7 @@ function VehicleTypeGroup({ type, routes, color }: { type: string; routes: Indiv
                 <td className="py-1.5 pr-3">{fmt(totals.items, 0)}</td>
                 <td className="py-1.5 pr-3">{fmt(totals.km)} km</td>
                 <td className="py-1.5 pr-3">{fmt(totals.hours)} h</td>
+                <td className="py-1.5 pr-3">{totals.delay >= 1 ? `+${fmt(totals.delay, 0)} min` : '—'}</td>
                 <td className="py-1.5 pr-3">CHF {fmt(totals.cost, 0)}</td>
                 <td className="py-1.5">{fmt(totals.co2)} kg</td>
               </tr>

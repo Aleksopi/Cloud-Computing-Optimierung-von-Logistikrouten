@@ -91,12 +91,20 @@ export function PipelinePanel({ status, onRunStep, onReset, loading, error }: Pi
           <div className="px-3 py-2 border-b border-slate-700/40 flex items-center gap-2">
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
             <span className="text-xs font-semibold text-slate-300">Ergebnis</span>
+            <span className="ml-auto"><TrafficBadge source={summary.traffic_source} /></span>
           </div>
           <div className="px-3 py-2 space-y-1.5 text-xs">
             <SumRow label="Apotheken" value={`${summary.pharmacies_assigned}/${summary.pharmacies_total}`} />
-            <SumRow label="Routen"    value={`${summary.evan_routes + summary.lkw_routes} gesamt`} />
-            <SumRow label="Distanz"   value={`${summary.total_km.toLocaleString('de-CH')} km`} />
-            <SumRow label="Kosten"    value={`CHF ${summary.total_cost_chf.toLocaleString('de-CH', {maximumFractionDigits:0})}`} bold />
+            <SumRow label="Routen"    value={`${summary.total_routes} gesamt`} />
+            <SumRow label="Distanz"   value={`${nf(summary.total_km)} km`} />
+            <SumRow label="CO₂"       value={`${nf(summary.total_co2_kg)} kg`} />
+            <SumRow label="Transport" value={`CHF ${nf(summary.total_cost_chf)}`} />
+            <SumRow label="+ Lager"   value={`CHF ${nf(summary.warehouse_cost_chf)}`} />
+            <SumRow label="Gesamt"    value={`CHF ${nf(summary.total_cost_incl_warehouse_chf)}`} bold />
+            <SumRow label="CHF/Apotheke" value={`CHF ${summary.cost_per_pharmacy_chf.toLocaleString('de-CH', {maximumFractionDigits:2})}`} />
+            {summary.traffic_total_delay_min >= 1 && (
+              <SumRow label="Verkehr (Mehrzeit)" value={`+${nf(summary.traffic_total_delay_min)} min`} />
+            )}
           </div>
         </div>
       )}
@@ -144,4 +152,19 @@ function SumRow({ label, value, bold }: { label: string; value: string; bold?: b
       <span className={bold ? 'text-slate-200 font-semibold' : 'text-slate-300'}>{value}</span>
     </div>
   )
+}
+
+const nf = (n: number) => n.toLocaleString('de-CH', { maximumFractionDigits: 0 })
+
+/** Small source badge: LIVE (TomTom) / SIM / STATIK / Live-Fehler. */
+function TrafficBadge({ source }: { source: string }) {
+  const map: Record<string, { label: string; cls: string }> = {
+    tomtom:       { label: 'LIVE',   cls: 'text-emerald-300 bg-emerald-950/50 border-emerald-800/50' },
+    tomtom_error: { label: 'LIVE!',  cls: 'text-red-300 bg-red-950/50 border-red-800/50' },
+    tomtom_nokey: { label: 'LIVE?',  cls: 'text-amber-300 bg-amber-950/50 border-amber-800/50' },
+    simulation:   { label: 'SIM',    cls: 'text-amber-300 bg-amber-950/50 border-amber-800/50' },
+    static:       { label: 'STATIK', cls: 'text-slate-400 bg-slate-800 border-slate-700' },
+  }
+  const m = map[source] ?? map.static
+  return <span className={`text-[9px] font-semibold rounded px-1 py-px border ${m.cls}`}>{m.label}</span>
 }

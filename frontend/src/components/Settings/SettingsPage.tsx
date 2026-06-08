@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { api } from '../../api/client'
-import type { VehicleConfig, VehicleConfigCreate, SystemConfigEntry, TrafficInfo } from '../../types'
+import { ErrorModal } from '../common/ErrorModal'
+import type { VehicleConfig, VehicleConfigCreate, SystemConfigEntry, TrafficInfo, TomTomConfig } from '../../types'
 
 const SETTINGS_TABS = [
   { id: 'fleet',      label: 'Flotte'        },
@@ -556,6 +557,10 @@ function WeightsTab({ sysConf, setSysConf, flashSaved, setError }: {
             {busy ? 'Speichern…' : 'Gewichtung speichern'}
           </button>
         </div>
+        <p className="text-xs text-slate-500 text-right">
+          ⟳ Wirkt erst nach erneutem Lauf von <strong>Schritt 4</strong>. Die Gewichtung steuert die
+          Fahrzeugwahl (Öko → wenig CO₂, Kosten → günstig, Zeit → schnell).
+        </p>
       </div>
     </section>
   )
@@ -568,15 +573,21 @@ const asDelay   = (f: number) => `${f >= 1 ? '+' : '−'}${Math.round(Math.abs(f
 
 function TrafficSection() {
   const [info,  setInfo]  = useState<TrafficInfo | null>(null)
+  const [tt,    setTt]    = useState<TomTomConfig | null>(null)
   const [peak,  setPeak]  = useState(1)
+  const [keyInput, setKeyInput] = useState('')
   const [busy,  setBusy]  = useState(false)
   const [err,   setErr]   = useState<string | null>(null)
+  const [modal, setModal] = useState<{ ok: boolean; message: string; detail?: string } | null>(null)
 
   const apply = useCallback((data: TrafficInfo) => { setInfo(data); setPeak(data.peak_intensity) }, [])
 
   useEffect(() => {
     let alive = true
-    const load = () => api.getTraffic().then(t => { if (alive) apply(t) }).catch(e => setErr(String(e)))
+    const load = () => {
+      api.getTraffic().then(t => { if (alive) apply(t) }).catch(e => setErr(String(e)))
+      api.getTomTom().then(c => { if (alive) setTt(c) }).catch(() => {})
+    }
     load()
     const id = setInterval(() => api.getTraffic().then(t => { if (alive) setInfo(t) }).catch(() => {}), 60_000)
     return () => { alive = false; clearInterval(id) }
@@ -584,7 +595,39 @@ function TrafficSection() {
 
   const save = async (enabled: boolean, peakIntensity: number) => {
     setBusy(true); setErr(null)
-    try { apply(await api.setTraffic(enabled, peakIntensity)) }
+    try { apply(await api.setTraffic(enabled, peakIntensity, tt?.mode)) }
+    catch (e) { setErr(e instanceof Error ? e.message : String(e)) }
+    finally { setBusy(false) }
+  }
+
+  const changeMode = async (mode: 'simulation' | 'tomtom') => {
+    if (!info || busy || tt?.mode === mode) return
+    setBusy(true); setErr(null)
+    try {
+      setTt(await api.setTomTom({ mode }))
+      apply(await api.getTraffic())   // applied source may flip
+      if (mode === 'tomtom') {
+        const t = await api.testTomTom()           // surface key/limit problems as popup
+        if (!t.ok) setModal(t)
+      }
+    } catch (e) { setErr(e instanceof Error ? e.message : String(e)) }
+    finally { setBusy(false) }
+  }
+
+  const saveKey = async () => {
+    setBusy(true); setErr(null)
+    try {
+      setTt(await api.setTomTom({ api_key: keyInput.trim() })); setKeyInput('')
+      apply(await api.getTraffic())
+      const t = await api.testTomTom()             // immediately verify the saved key
+      setModal(t)                                  // show success or error (with detail)
+    } catch (e) { setErr(e instanceof Error ? e.message : String(e)) }
+    finally { setBusy(false) }
+  }
+
+  const testKey = async () => {
+    setBusy(true); setErr(null)
+    try { setModal(await api.testTomTom()) }
     catch (e) { setErr(e instanceof Error ? e.message : String(e)) }
     finally { setBusy(false) }
   }
@@ -592,6 +635,7 @@ function TrafficSection() {
   if (!info) return null
   const on   = info.enabled
   const cong = info.current_congestion
+  const live = info.source === 'tomtom'
   const peakChanged = Math.abs(peak - info.peak_intensity) > 0.001
 
   // Preview the daily curve at the slider's peak (model is linear in peak).
@@ -607,10 +651,14 @@ function TrafficSection() {
           <span className={`w-2 h-2 rounded-full ${on ? 'bg-amber-400' : 'bg-slate-600'}`} />
           <div>
             <h3 className="text-sm font-semibold text-slate-200">
-              Verkehrsmodell <span className="text-[10px] font-medium text-slate-500 align-middle">(Tageszeit-Simulation)</span>
+              Verkehrsmodell <span className="text-[10px] font-medium text-slate-500 align-middle">
+                ({live ? 'TomTom Live' : 'Tageszeit-Simulation'})
+              </span>
             </h3>
             <p className="text-xs text-slate-500 mt-0.5">
-              Simuliertes, tageszeitabhängiges Stau-Modell — skaliert die Fahrzeiten in der Routenoptimierung (Schritt 4)
+              {live
+                ? 'Echtzeit-Verkehr von TomTom — skaliert die Fahrzeiten in der Routenoptimierung (Schritt 4)'
+                : 'Simuliertes, tageszeitabhängiges Stau-Modell — skaliert die Fahrzeiten in der Routenoptimierung (Schritt 4)'}
             </p>
           </div>
         </div>
@@ -626,15 +674,24 @@ function TrafficSection() {
       <div className="px-5 py-5 space-y-5">
         {err && <div className="text-xs text-red-400 bg-red-950/40 border border-red-800/40 rounded-lg px-3 py-2">{err}</div>}
 
+        {/* Last Step-4 live-run error (key invalid / limit reached) */}
+        {tt?.last_error && (
+          <div className="flex items-start gap-2 text-xs text-red-300 bg-red-950/40 border border-red-800/50 rounded-lg px-3 py-2">
+            <span className="flex-shrink-0">⚠</span>
+            <span><strong>Letzter Live-Lauf:</strong> {tt.last_error}</span>
+          </div>
+        )}
+
         {/* Status tiles */}
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-          <Tile label="Status" value={on ? 'Aktiv' : 'Inaktiv'}
-                color={on ? '#fbbf24' : '#64748b'} hint={on ? 'Stau-Modell läuft' : 'Statischer Faktor'} />
+          <Tile label="Status" value={on ? 'Aktiv' : 'Inaktiv'} live={live}
+                color={on ? (live ? '#34d399' : '#fbbf24') : '#64748b'}
+                hint={on ? (live ? 'TomTom Live-Daten' : 'Stau-Modell läuft') : 'Statischer Faktor'} />
           <Tile label="Angewandter Faktor" value={`×${info.effective_factor.toFixed(2)}`}
                 color={on ? congColor(info.effective_factor) : '#94a3b8'}
-                hint={on ? `Schicht-Ø · ${asDelay(info.effective_factor)} Fahrzeit` : 'aus statischem Verkehrsfaktor'} />
-          <Tile label="Modell · jetzt" value={`×${cong.toFixed(2)}`} color={congColor(cong)}
-                hint={`${asDelay(cong)} · ${new Date().toLocaleTimeString('de-CH', { hour: '2-digit', minute: '2-digit' })} Uhr (simuliert)`} />
+                hint={on ? `${live ? 'Live' : 'Schicht-Ø'} · ${asDelay(info.effective_factor)} Fahrzeit` : 'aus statischem Verkehrsfaktor'} />
+          <Tile label={live ? 'Verkehr · jetzt' : 'Modell · jetzt'} value={`×${cong.toFixed(2)}`} color={congColor(cong)}
+                hint={`${asDelay(cong)} · ${new Date().toLocaleTimeString('de-CH', { hour: '2-digit', minute: '2-digit' })} Uhr ${live ? '(live)' : '(simuliert)'}`} />
         </div>
 
         {/* Peak intensity slider */}
@@ -674,16 +731,88 @@ function TrafficSection() {
           hin zu schnelleren Routen. Änderungen wirken beim nächsten Lauf von Schritt 4.
         </p>
 
-        {/* Honesty disclaimer */}
-        <div className="flex items-start gap-2 text-xs text-amber-300/90 bg-amber-950/20 border border-amber-800/40 rounded-lg px-3 py-2">
-          <span className="flex-shrink-0">ⓘ</span>
-          <span className="leading-relaxed">
-            <strong>Simulation, keine Echtzeitdaten:</strong> Die Werte stammen aus einem deterministischen
-            Tagesgang-Profil (Schweizer Pendlerverkehr), nicht aus einem Live-Verkehrsdienst. Eine echte
-            Anbindung (z.&nbsp;B. TomTom/HERE) bräuchte einen API-Key und ausgehenden Internetzugang.
-          </span>
-        </div>
+        {/* Dynamic disclaimer */}
+        {live ? (
+          <div className="flex items-start gap-2 text-xs text-emerald-300/90 bg-emerald-950/20 border border-emerald-800/40 rounded-lg px-3 py-2">
+            <span className="flex-shrink-0">●</span>
+            <span className="leading-relaxed">
+              <strong>TomTom Live-Verkehr aktiv:</strong> Fahrzeiten in Schritt 4 stammen aus TomTom
+              Matrix Routing (stau-bereinigt); bei API-Ausfall automatischer Rückfall auf die Simulation.
+            </span>
+          </div>
+        ) : (
+          <div className="flex items-start gap-2 text-xs text-amber-300/90 bg-amber-950/20 border border-amber-800/40 rounded-lg px-3 py-2">
+            <span className="flex-shrink-0">ⓘ</span>
+            <span className="leading-relaxed">
+              <strong>Simulation, keine Echtzeitdaten:</strong> Werte aus einem deterministischen
+              Tagesgang-Profil (Schweizer Pendlerverkehr). Für echten Live-Verkehr unten auf
+              „TomTom Live" umstellen (API-Key nötig).
+            </span>
+          </div>
+        )}
+
+        {/* Data source + TomTom API key (always visible) */}
+        {tt && (
+          <div className="rounded-lg border border-slate-700/50 bg-slate-800/30 p-4 space-y-4">
+            <h4 className="text-xs font-semibold text-slate-300">Datenquelle &amp; TomTom-API</h4>
+
+            {/* Mode segmented control */}
+            <div>
+              <p className="text-[11px] text-slate-400 mb-1.5">Verkehrsdatenquelle</p>
+              <div className="inline-flex rounded-lg border border-slate-700 overflow-hidden text-xs">
+                {(['simulation', 'tomtom'] as const).map(m => (
+                  <button key={m} onClick={() => changeMode(m)} disabled={busy}
+                    className={`px-3 py-1.5 font-medium transition-colors ${
+                      tt.mode === m ? 'bg-blue-600 text-white' : 'bg-slate-800 text-slate-400 hover:text-slate-200'}`}>
+                    {m === 'simulation' ? 'Simulation' : 'TomTom Live'}
+                  </button>
+                ))}
+              </div>
+              {tt.mode === 'tomtom' && tt.key_source === 'none' && (
+                <p className="text-[10px] text-amber-400 mt-1.5">Kein API-Key hinterlegt — Live nutzt Freifluss (kein Stau).</p>
+              )}
+            </div>
+
+            {/* API key — always editable; a saved key overrides .env */}
+            <div>
+              <p className="text-[11px] text-slate-400 mb-1.5">
+                TomTom API-Key
+                <span className="text-slate-600 ml-1">
+                  {tt.key_source === 'file' ? `· aus .env geladen (${tt.key_masked})`
+                    : tt.key_source === 'db' ? `· gespeichert (${tt.key_masked})` : '· nicht gesetzt'}
+                </span>
+              </p>
+              <div className="flex gap-2">
+                <input type="password" value={keyInput} onChange={e => setKeyInput(e.target.value)}
+                       placeholder={tt.key_masked ? `${tt.key_masked} — neuen Key eingeben…` : 'API-Key eingeben…'}
+                       className="flex-1 bg-slate-900 text-slate-200 text-xs rounded-md px-2.5 py-1.5 border border-slate-700 focus:outline-none focus:border-blue-500" />
+                <button onClick={saveKey} disabled={busy || !keyInput.trim()}
+                        className="text-xs px-3 py-1.5 rounded-md font-medium bg-blue-600 hover:bg-blue-500 disabled:bg-slate-700 disabled:text-slate-500 text-white transition-colors">
+                  Speichern
+                </button>
+                <button onClick={testKey} disabled={busy}
+                        className="text-xs px-3 py-1.5 rounded-md font-medium border border-slate-600 text-slate-300 hover:border-slate-400 transition-colors">
+                  Testen
+                </button>
+              </div>
+              <p className="text-[10px] text-slate-600 mt-1">
+                Wird automatisch aus der <code className="text-slate-500">.env</code> gelesen, ist hier aber
+                überschreibbar. Ein gespeicherter Key hat Vorrang; Feld leeren + Speichern → wieder <code className="text-slate-500">.env</code>.
+              </p>
+            </div>
+          </div>
+        )}
       </div>
+
+      {modal && (
+        <ErrorModal
+          title={modal.ok ? 'TomTom-Verbindung OK' : 'TomTom-Verbindung fehlgeschlagen'}
+          variant={modal.ok ? 'success' : 'error'}
+          message={modal.message}
+          detail={modal.detail}
+          onClose={() => setModal(null)}
+        />
+      )}
     </section>
   )
 }

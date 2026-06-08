@@ -346,7 +346,8 @@ export function MapView({
     set('backbone-hq-vz-layer',  'line-color', COLORS.backboneHqVz)
     set('backbone-vz-mvz-layer', 'line-color', COLORS.backboneVzMvz)
 
-    const inactive = !h || (h.hubs.length === 0 && h.routeId == null && h.pharmacyId == null && !h.vehicleId)
+    const inactive = !h || (h.hubs.length === 0 && h.routeId == null && h.pharmacyId == null
+                            && h.servingPharmacyId == null && h.chainPharmacyId == null && !h.vehicleId)
     if (inactive) {
       set('routes-layer',          'line-opacity', 0.9);  set('routes-layer', 'line-width', 3)
       set('backbone-hq-vz-layer',  'line-opacity', 0.85); set('backbone-hq-vz-layer',  'line-width', 4)
@@ -363,6 +364,60 @@ export function MapView({
     const hubs = h.hubs
     const inHubs = (key: string): any => ['in', ['get', key], ['literal', hubs]]
     const bbRelevant: any = ['any', inHubs('from_hub'), ...hubs.map(hn => ['in', hn, ['get', 'to_hubs']])]
+
+    // ── Complete supply chain (button): serving route + assignment + backbone ──
+    if (h.chainPharmacyId != null) {
+      const pid = h.chainPharmacyId
+      const inRoute: any = ['in', pid, ['get', 'stops']]
+      // Serving last-mile route — prominent in its vehicle-type colour
+      set('routes-layer', 'line-color',   ROUTE_COLOR_EXPR)
+      set('routes-layer', 'line-opacity', ['case', inRoute, 1.0, DIM])
+      set('routes-layer', 'line-width',   ['case', inRoute, 5, 1.5])
+      // Assignment line for this pharmacy — amber, distinct
+      set('assignments-layer', 'line-color',   '#f59e0b')
+      set('assignments-layer', 'line-width',   3.5)
+      set('assignments-layer', 'line-opacity', 0.95)
+      // Backbone chain (mVZ→VZ→HQ) prominent in its own colours
+      set('backbone-hq-vz-layer',  'line-color', COLORS.backboneHqVz)
+      set('backbone-vz-mvz-layer', 'line-color', COLORS.backboneVzMvz)
+      set('backbone-hq-vz-layer',  'line-opacity', ['case', bbRelevant, 0.95, DIM])
+      set('backbone-hq-vz-layer',  'line-width',   ['case', bbRelevant, 5, 2])
+      set('backbone-vz-mvz-layer', 'line-opacity', ['case', bbRelevant, 0.9, DIM])
+      set('backbone-vz-mvz-layer', 'line-width',   ['case', bbRelevant, 4, 2])
+      // Spotlight pharmacy + chain hubs
+      const isPh: any = ['==', ['get', 'id'], pid]
+      set('pharmacies-layer', 'circle-opacity',        ['case', isPh, 1.0, 0.1])
+      set('pharmacies-layer', 'circle-stroke-opacity', ['case', isPh, 1.0, 0.1])
+      const hubMatch: any = hubs.length ? ['case', inHubs('name'), 1, 0.2] : 1
+      set('hubs-layer',  'circle-opacity',        hubMatch)
+      set('hubs-layer',  'circle-stroke-opacity', hubMatch)
+      set('hubs-labels', 'text-opacity',          hubMatch)
+      return
+    }
+
+    // ── Pharmacy click: show only the last-mile route that delivers it ──────
+    if (h.servingPharmacyId != null) {
+      const pid = h.servingPharmacyId
+      const inRoute: any = ['in', pid, ['get', 'stops']]   // route whose stop list contains this pharmacy
+      set('routes-layer', 'line-color',   ROUTE_COLOR_EXPR)         // keep vehicle-type colour
+      set('routes-layer', 'line-opacity', ['case', inRoute, 1.0, DIM])
+      set('routes-layer', 'line-width',   ['case', inRoute, 5, 1.5])
+      // Mute everything else
+      set('backbone-hq-vz-layer',  'line-opacity', DIM)
+      set('backbone-vz-mvz-layer', 'line-opacity', DIM)
+      set('assignments-layer', 'line-color',   ASSIGN_COLOR_EXPR)
+      set('assignments-layer', 'line-width',   1.2)
+      set('assignments-layer', 'line-opacity', DIM)
+      // Spotlight the clicked pharmacy
+      const isPh: any = ['==', ['get', 'id'], pid]
+      set('pharmacies-layer', 'circle-opacity',        ['case', isPh, 1.0, 0.12])
+      set('pharmacies-layer', 'circle-stroke-opacity', ['case', isPh, 1.0, 0.12])
+      const hubMatch: any = hubs.length ? ['case', inHubs('name'), 1, 0.3] : 1
+      set('hubs-layer',  'circle-opacity',        hubMatch)
+      set('hubs-layer',  'circle-stroke-opacity', hubMatch)
+      set('hubs-labels', 'text-opacity',          hubMatch)
+      return
+    }
 
     // ── Focused vehicle: route already filtered → just make it prominent ───
     if (h.vehicleId) {
@@ -500,6 +555,10 @@ function tooltipHtml(feat: maplibregl.MapGeoJSONFeature): string {
     h = `<strong>${esc(p.vehicle_id)}</strong>`
     h += `<div class="t-row">${esc(p.vehicle_type)} · ${p.stop_count} Stops</div>`
     h += `<div class="t-row">${p.total_km} km · CHF ${p.total_cost_chf}</div>`
+    if (p.total_hours != null) {
+      const live = p.traffic_source === 'tomtom'
+      h += `<div class="t-row">⏱ ca. ${Number(p.total_hours).toFixed(1)} h${live ? ' · LIVE' : ''}</div>`
+    }
   } else if (lid === 'backbone-hq-vz-layer' || lid === 'backbone-vz-mvz-layer') {
     const t = lid.includes('hq') ? 'HQ → VZ' : 'VZ → mVZ'
     h = `<strong>Hauptlauf ${t}</strong>`

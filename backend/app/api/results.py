@@ -6,9 +6,16 @@ from sqlalchemy import or_
 
 from app.db.models import Assignment, Hub, Pharmacy, SystemConfig, VehicleFleetConfig, VehicleRoute
 from app.db.session import SessionLocal
-from app.services.traffic import effective_factor, hourly_profile
+from app.services.traffic import resolve as traffic_resolve
 
 router = APIRouter()
+
+
+def _traffic_delay_min(r: VehicleRoute) -> float | None:
+    """Extra driving minutes vs. free flow for this route (factor − 1)."""
+    if r.free_flow_hours and r.traffic_factor:
+        return round(r.free_flow_hours * (r.traffic_factor - 1.0) * 60.0, 1)
+    return None
 
 
 def _fmt_hour(h: float | None) -> str:
@@ -28,22 +35,15 @@ def _window(start_h: float | None, hours: float | None) -> str:
 
 
 def _optimization_block(sys_raw: dict[str, str]) -> dict:
-    """Optimisation weights + the traffic-model (time-of-day simulation) context used by Step 4."""
+    """Optimisation weights + the traffic context (simulation ↔ TomTom) used by Step 4."""
     def _f(key: str, default: float) -> float:
         try:
             return float(sys_raw.get(key, default))
         except (TypeError, ValueError):
             return default
 
-    live_on     = _f("live_traffic_enabled", 0.0) >= 0.5
-    peak        = _f("traffic_peak_intensity", 1.0)
-    static_tf   = _f("traffic_factor", 1.0)
-    shift_start = _f("shift_start", 8.0)
-    shift_hours = _f("shift_hours", 8.0)
-    eff = effective_factor(
-        enabled=live_on, static_factor=static_tf,
-        shift_start=shift_start, shift_hours=shift_hours, peak_intensity=peak,
-    )
+    ctx = traffic_resolve(sys_raw)
+    eff = ctx["effective_factor"]
     return {
         "weights": {
             "cost":        _f("opt_weight_cost", 0.40),
@@ -51,14 +51,17 @@ def _optimization_block(sys_raw: dict[str, str]) -> dict:
             "environment": _f("opt_weight_env",  0.25),
         },
         "traffic_factor":          eff,                 # actually applied factor
-        "static_traffic_factor":   round(static_tf, 3),
-        "live_traffic_enabled":    live_on,
-        "traffic_peak_intensity":  round(peak, 2),
+        "static_traffic_factor":   ctx["static_factor"],
+        "live_traffic_enabled":    ctx["enabled"],
+        "traffic_mode":            ctx["mode"],         # "simulation" | "tomtom"
+        "traffic_source":          ctx["source"],       # "static" | "simulation" | "tomtom"
+        "traffic_peak_intensity":  ctx["peak_intensity"],
         "effective_traffic_factor": eff,
-        "traffic_profile":         hourly_profile(peak) if live_on else None,
+        # 24h curve only meaningful for the simulation (TomTom has no daily profile)
+        "traffic_profile":         ctx["profile"] if (ctx["enabled"] and ctx["source"] == "simulation") else None,
         "co2_shadow_chf_per_kg":   _f("co2_shadow_chf", 0.12),
-        "shift_hours":             shift_hours,
-        "shift_start":             shift_start,
+        "shift_hours":             ctx["shift_hours"],
+        "shift_start":             ctx["shift_start"],
     }
 
 
@@ -218,8 +221,13 @@ def get_routes():
                             "total_items": r.total_items,
                             "total_cost_chf": r.total_cost_chf,
                             "co2_kg": r.co2_kg,
+                            "stops": r.stops or [],          # pharmacy ids — map filter: pharmacy → route
                             "stop_count": len(r.stops) if r.stops else 0,
                             "restock_count": r.restock_count,
+                            "traffic_factor": r.traffic_factor,
+                            "traffic_source": r.traffic_source,
+                            "free_flow_hours": r.free_flow_hours,
+                            "traffic_delay_min": _traffic_delay_min(r),
                         },
                     }
                 )
@@ -272,16 +280,29 @@ def get_summary():
     db = SessionLocal()
     try:
         pharmacies = db.query(Pharmacy).all()
-        routes = db.query(VehicleRoute).all()
-        hubs = db.query(Hub).count()
+        routes   = db.query(VehicleRoute).all()
+        all_hubs = db.query(Hub).all()
+        sys_raw  = {c.key: c.value for c in db.query(SystemConfig).all()}
+        ctx = traffic_resolve(sys_raw)
+
+        assigned   = sum(1 for p in pharmacies if p.hub_name)
+        route_cost = round(sum(r.total_cost_chf or 0 for r in routes), 2)
+        wh_cost    = round(sum(h.warehouse_cost or 0 for h in all_hubs), 2)
         return {
-            "hubs": hubs,
+            "hubs": len(all_hubs),
             "pharmacies_total": len(pharmacies),
-            "pharmacies_assigned": sum(1 for p in pharmacies if p.hub_name),
+            "pharmacies_assigned": assigned,
             "total_demand": sum(p.demand or 0 for p in pharmacies),
             "total_routes": len(routes),
-            "total_cost_chf": round(sum(r.total_cost_chf or 0 for r in routes), 2),
+            "total_cost_chf": route_cost,
+            "warehouse_cost_chf": wh_cost,
+            "total_cost_incl_warehouse_chf": round(route_cost + wh_cost, 2),
             "total_km": round(sum(r.total_km or 0 for r in routes), 2),
+            "total_co2_kg": round(sum(r.co2_kg or 0 for r in routes), 2),
+            "cost_per_pharmacy_chf": round(route_cost / assigned, 2) if assigned else 0,
+            "traffic_source": ctx["source"],
+            "traffic_total_delay_min": round(sum(_traffic_delay_min(r) or 0 for r in routes), 1),
+            # legacy fields (kept for compatibility)
             "evan_routes": sum(1 for r in routes if r.vehicle_type == "EVan"),
             "lkw_routes": sum(1 for r in routes if r.vehicle_type == "LKW"),
         }
@@ -439,6 +460,9 @@ def get_full_summary():
                 "total_cost_chf": round(r.total_cost_chf or 0, 2),
                 "co2_kg":        round(r.co2_kg or 0, 3),
                 "restock_count": r.restock_count or 0,
+                "traffic_factor":    r.traffic_factor,
+                "traffic_source":    r.traffic_source,
+                "traffic_delay_min": _traffic_delay_min(r),
             }
             for r in backbone
         ], key=lambda x: (x["vehicle_type"], x["hub_name"], x["vehicle_id"]))
@@ -446,6 +470,25 @@ def get_full_summary():
         # ── Warehouse (Lager) costs ───────────────────────────────────────────
         warehouse_total = round(sum(h.warehouse_cost or 0 for h in all_hubs), 2)
         route_cost_total = round(sum(r.total_cost_chf or 0 for r in all_routes), 2)
+
+        # ── Traffic impact aggregate (per vehicle type) ───────────────────────
+        traffic_ctx = traffic_resolve(sys_raw)
+        tbt: dict[str, dict] = {}
+        for r in all_routes:
+            vt = r.vehicle_type or "—"
+            s = tbt.setdefault(vt, {"routes": 0, "total_delay_min": 0.0,
+                                    "_ff": 0.0, "_drive": 0.0, "source": r.traffic_source})
+            s["routes"] += 1
+            s["total_delay_min"] += _traffic_delay_min(r) or 0
+            ff = r.free_flow_hours or 0.0
+            s["_ff"]    += ff
+            s["_drive"] += ff * (r.traffic_factor or 1.0)
+            if r.traffic_source:
+                s["source"] = r.traffic_source
+        for s in tbt.values():
+            s["avg_factor"]      = round(s["_drive"] / s["_ff"], 3) if s["_ff"] > 1e-6 else 1.0
+            s["total_delay_min"] = round(s["total_delay_min"], 1)
+            del s["_ff"], s["_drive"]
 
         return {
             "overview": {
@@ -459,6 +502,7 @@ def get_full_summary():
                 "pharmacies_total":        len(pharmacies),
                 "pharmacies_assigned":     sum(1 for p in pharmacies if p.hub_name),
                 "hubs_total":              len(all_hubs),
+                "traffic_total_delay_min": round(sum(_traffic_delay_min(r) or 0 for r in all_routes), 1),
             },
             "fleet_by_type":  {vt: {**s, "total_km": round(s["total_km"], 2),
                                          "total_hours": round(s["total_hours"], 2),
@@ -494,6 +538,15 @@ def get_full_summary():
                 "pharmacy_count": len(pharmacies),
                 "hierarchy":      hierarchy,
             },
+            "traffic": {
+                "mode":            traffic_ctx["mode"],
+                "source":          traffic_ctx["source"],
+                "error":           traffic_ctx.get("error"),
+                "last_error":      sys_raw.get("tomtom_last_error") or "",
+                "effective_factor": traffic_ctx["effective_factor"],
+                "total_delay_min": round(sum(_traffic_delay_min(r) or 0 for r in all_routes), 1),
+                "by_type":         tbt,
+            },
             "metrics": {
                 "avg_stops_per_route":   round(total_lm_stops / max(1, len(last_mile)), 1),
                 "avg_km_per_route":      round(total_lm_km    / max(1, len(last_mile)), 1),
@@ -528,6 +581,9 @@ def get_full_summary():
                     "total_cost_chf": round(r.total_cost_chf or 0, 2),
                     "co2_kg":        round(r.co2_kg or 0, 3),
                     "restock_count": r.restock_count or 0,
+                    "traffic_factor":    r.traffic_factor,
+                    "traffic_source":    r.traffic_source,
+                    "traffic_delay_min": _traffic_delay_min(r),
                 }
                 for r in last_mile
             ], key=lambda x: (x["vehicle_type"], x["hub_name"], x["vehicle_id"])),

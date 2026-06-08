@@ -1,6 +1,6 @@
 import type {
   FullSummary, PipelineStatus, Summary,
-  VehicleConfig, VehicleConfigCreate, SystemConfigEntry, TrafficInfo,
+  VehicleConfig, VehicleConfigCreate, SystemConfigEntry, TrafficInfo, TomTomConfig, TomTomTest,
 } from '../types'
 
 async function json<T>(path: string, init?: RequestInit): Promise<T> {
@@ -54,6 +54,12 @@ export const api = {
 
   // Settings — live traffic
   getTraffic: () => json<TrafficInfo>('/api/settings/traffic'),
-  setTraffic: (enabled: boolean, peak_intensity?: number) =>
-    json<TrafficInfo>('/api/settings/traffic', jsonPut({ enabled, peak_intensity })),
+  setTraffic: (enabled: boolean, peak_intensity?: number, mode?: 'simulation' | 'tomtom') =>
+    json<TrafficInfo>('/api/settings/traffic', jsonPut({ enabled, peak_intensity, mode })),
+
+  // Settings — TomTom API key + data-source mode
+  getTomTom: () => json<TomTomConfig>('/api/settings/tomtom'),
+  setTomTom: (body: { api_key?: string; mode?: 'simulation' | 'tomtom' }) =>
+    json<TomTomConfig>('/api/settings/tomtom', jsonPut(body)),
+  testTomTom: () => json<TomTomTest>('/api/settings/tomtom/test', { method: 'POST' }),
 }
