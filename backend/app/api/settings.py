@@ -171,12 +171,13 @@ def _tomtom_payload() -> dict:
     finally:
         db.close()
     db_key = raw.get("tomtom_api_key") or ""
-    src = tomtom.key_source(db_key)        # "file" | "db" | "none"
+    src = tomtom.key_source(db_key)        # "db" | "file" | "none"
     return {
         "mode":       (raw.get("traffic_mode") or "simulation"),
         "key_source": src,
         "key_masked": tomtom.mask(tomtom.resolve_key(db_key)),
-        "can_edit":   src != "file",       # file (.env) key wins → website entry locked
+        "can_edit":   True,                # key is always editable; a saved key overrides .env
+        "last_error": raw.get("tomtom_last_error") or "",   # from last Step-4 live run
     }
 
 
@@ -185,16 +186,25 @@ def get_tomtom():
     return _tomtom_payload()
 
 
+@router.post("/tomtom/test")
+def test_tomtom():
+    """Live connectivity test for the resolved key → {ok, error_type, message}."""
+    db = SessionLocal()
+    try:
+        raw = {c.key: c.value for c in db.query(SystemConfig).all()}
+    finally:
+        db.close()
+    return tomtom.probe(tomtom.resolve_key(raw.get("tomtom_api_key")))
+
+
 @router.put("/tomtom")
 def update_tomtom(body: TomTomBody):
     db = SessionLocal()
     try:
-        raw = {c.key: c.value for c in db.query(SystemConfig).all()}
-        file_key = tomtom.key_source(raw.get("tomtom_api_key")) == "file"
         if body.mode in ("simulation", "tomtom"):
             _upsert(db, "traffic_mode", body.mode)
-        # Respect file precedence: ignore website key when a .env key exists.
-        if body.api_key is not None and not file_key:
+        # Always store the website key — a saved key overrides .env; empty clears it.
+        if body.api_key is not None:
             _upsert(db, "tomtom_api_key", body.api_key.strip())
         db.commit()
     finally:
@@ -214,8 +224,11 @@ def _upsert(db, key: str, value: str) -> None:
 
 def _traffic_payload(raw: dict[str, str]) -> dict:
     """Traffic context for the UI — delegates to the central resolver
-    (simulation ↔ TomTom). Adds `mode` + `source` on top of the legacy shape."""
-    return traffic_resolve(raw)
+    (simulation ↔ TomTom). Adds `mode`/`source`/`error` plus the last Step-4
+    live-run error for the post-run popup."""
+    payload = traffic_resolve(raw)
+    payload["last_error"] = raw.get("tomtom_last_error") or ""
+    return payload
 
 
 def _vehicle_dict(v: VehicleFleetConfig) -> dict:

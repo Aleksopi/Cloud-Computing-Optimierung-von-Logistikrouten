@@ -39,6 +39,7 @@ DEFAULT_SYSTEM_CONFIG = [
     ("live_traffic_enabled", "0",     "Verkehrsmodell (Tageszeit)",        "1 = Verkehrsmodell aktiv; 0 = statischer Verkehrsfaktor"),
     ("traffic_mode",        "simulation", "Verkehrsdatenquelle",            "simulation = Tageszeit-Modell (keine Echtzeitdaten); tomtom = TomTom Live Traffic"),
     ("tomtom_api_key",      "",       "TomTom API-Key",                    "Leer = aus .env-Datei laden bzw. Simulation. Datei-Key hat Vorrang."),
+    ("tomtom_last_error",   "",       "TomTom: letzter Fehler",            "Vom letzten Schritt-4-Lauf gesetzt (z.B. Limit/Key) — leer = ok."),
     ("traffic_peak_intensity", "1.0", "Verkehrsmodell: Stau-Intensität",   "Skaliert die Hauptverkehrs-Aufschläge der Simulation (1.0 = Standard)"),
     ("co2_shadow_chf",      "0.12",   "CO₂-Schattenpreis (CHF/kg)",        "Monetarisierung der Umweltkosten"),
     ("max_catchment_km",    "10.0",   "Max. Einzugsgebiet-Radius (km)",    "Für Warenbedarf-Berechnung"),

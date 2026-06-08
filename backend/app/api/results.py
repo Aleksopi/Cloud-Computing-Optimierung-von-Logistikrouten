@@ -280,16 +280,29 @@ def get_summary():
     db = SessionLocal()
     try:
         pharmacies = db.query(Pharmacy).all()
-        routes = db.query(VehicleRoute).all()
-        hubs = db.query(Hub).count()
+        routes   = db.query(VehicleRoute).all()
+        all_hubs = db.query(Hub).all()
+        sys_raw  = {c.key: c.value for c in db.query(SystemConfig).all()}
+        ctx = traffic_resolve(sys_raw)
+
+        assigned   = sum(1 for p in pharmacies if p.hub_name)
+        route_cost = round(sum(r.total_cost_chf or 0 for r in routes), 2)
+        wh_cost    = round(sum(h.warehouse_cost or 0 for h in all_hubs), 2)
         return {
-            "hubs": hubs,
+            "hubs": len(all_hubs),
             "pharmacies_total": len(pharmacies),
-            "pharmacies_assigned": sum(1 for p in pharmacies if p.hub_name),
+            "pharmacies_assigned": assigned,
             "total_demand": sum(p.demand or 0 for p in pharmacies),
             "total_routes": len(routes),
-            "total_cost_chf": round(sum(r.total_cost_chf or 0 for r in routes), 2),
+            "total_cost_chf": route_cost,
+            "warehouse_cost_chf": wh_cost,
+            "total_cost_incl_warehouse_chf": round(route_cost + wh_cost, 2),
             "total_km": round(sum(r.total_km or 0 for r in routes), 2),
+            "total_co2_kg": round(sum(r.co2_kg or 0 for r in routes), 2),
+            "cost_per_pharmacy_chf": round(route_cost / assigned, 2) if assigned else 0,
+            "traffic_source": ctx["source"],
+            "traffic_total_delay_min": round(sum(_traffic_delay_min(r) or 0 for r in routes), 1),
+            # legacy fields (kept for compatibility)
             "evan_routes": sum(1 for r in routes if r.vehicle_type == "EVan"),
             "lkw_routes": sum(1 for r in routes if r.vehicle_type == "LKW"),
         }
@@ -458,6 +471,25 @@ def get_full_summary():
         warehouse_total = round(sum(h.warehouse_cost or 0 for h in all_hubs), 2)
         route_cost_total = round(sum(r.total_cost_chf or 0 for r in all_routes), 2)
 
+        # ── Traffic impact aggregate (per vehicle type) ───────────────────────
+        traffic_ctx = traffic_resolve(sys_raw)
+        tbt: dict[str, dict] = {}
+        for r in all_routes:
+            vt = r.vehicle_type or "—"
+            s = tbt.setdefault(vt, {"routes": 0, "total_delay_min": 0.0,
+                                    "_ff": 0.0, "_drive": 0.0, "source": r.traffic_source})
+            s["routes"] += 1
+            s["total_delay_min"] += _traffic_delay_min(r) or 0
+            ff = r.free_flow_hours or 0.0
+            s["_ff"]    += ff
+            s["_drive"] += ff * (r.traffic_factor or 1.0)
+            if r.traffic_source:
+                s["source"] = r.traffic_source
+        for s in tbt.values():
+            s["avg_factor"]      = round(s["_drive"] / s["_ff"], 3) if s["_ff"] > 1e-6 else 1.0
+            s["total_delay_min"] = round(s["total_delay_min"], 1)
+            del s["_ff"], s["_drive"]
+
         return {
             "overview": {
                 "total_cost_chf":          route_cost_total,
@@ -505,6 +537,15 @@ def get_full_summary():
                 "mvz_count":      len(mvz_list),
                 "pharmacy_count": len(pharmacies),
                 "hierarchy":      hierarchy,
+            },
+            "traffic": {
+                "mode":            traffic_ctx["mode"],
+                "source":          traffic_ctx["source"],
+                "error":           traffic_ctx.get("error"),
+                "last_error":      sys_raw.get("tomtom_last_error") or "",
+                "effective_factor": traffic_ctx["effective_factor"],
+                "total_delay_min": round(sum(_traffic_delay_min(r) or 0 for r in all_routes), 1),
+                "by_type":         tbt,
             },
             "metrics": {
                 "avg_stops_per_route":   round(total_lm_stops / max(1, len(last_mile)), 1),

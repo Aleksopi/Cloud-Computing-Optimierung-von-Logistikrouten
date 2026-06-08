@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { api } from '../../api/client'
+import { ErrorModal } from '../common/ErrorModal'
 import type { VehicleConfig, VehicleConfigCreate, SystemConfigEntry, TrafficInfo, TomTomConfig } from '../../types'
 
 const SETTINGS_TABS = [
@@ -556,6 +557,10 @@ function WeightsTab({ sysConf, setSysConf, flashSaved, setError }: {
             {busy ? 'Speichern…' : 'Gewichtung speichern'}
           </button>
         </div>
+        <p className="text-xs text-slate-500 text-right">
+          ⟳ Wirkt erst nach erneutem Lauf von <strong>Schritt 4</strong>. Die Gewichtung steuert die
+          Fahrzeugwahl (Öko → wenig CO₂, Kosten → günstig, Zeit → schnell).
+        </p>
       </div>
     </section>
   )
@@ -571,9 +576,9 @@ function TrafficSection() {
   const [tt,    setTt]    = useState<TomTomConfig | null>(null)
   const [peak,  setPeak]  = useState(1)
   const [keyInput, setKeyInput] = useState('')
-  const [advanced, setAdvanced] = useState(false)
   const [busy,  setBusy]  = useState(false)
   const [err,   setErr]   = useState<string | null>(null)
+  const [modal, setModal] = useState<{ ok: boolean; message: string; detail?: string } | null>(null)
 
   const apply = useCallback((data: TrafficInfo) => { setInfo(data); setPeak(data.peak_intensity) }, [])
 
@@ -601,6 +606,10 @@ function TrafficSection() {
     try {
       setTt(await api.setTomTom({ mode }))
       apply(await api.getTraffic())   // applied source may flip
+      if (mode === 'tomtom') {
+        const t = await api.testTomTom()           // surface key/limit problems as popup
+        if (!t.ok) setModal(t)
+      }
     } catch (e) { setErr(e instanceof Error ? e.message : String(e)) }
     finally { setBusy(false) }
   }
@@ -610,7 +619,16 @@ function TrafficSection() {
     try {
       setTt(await api.setTomTom({ api_key: keyInput.trim() })); setKeyInput('')
       apply(await api.getTraffic())
+      const t = await api.testTomTom()             // immediately verify the saved key
+      setModal(t)                                  // show success or error (with detail)
     } catch (e) { setErr(e instanceof Error ? e.message : String(e)) }
+    finally { setBusy(false) }
+  }
+
+  const testKey = async () => {
+    setBusy(true); setErr(null)
+    try { setModal(await api.testTomTom()) }
+    catch (e) { setErr(e instanceof Error ? e.message : String(e)) }
     finally { setBusy(false) }
   }
 
@@ -655,6 +673,14 @@ function TrafficSection() {
 
       <div className="px-5 py-5 space-y-5">
         {err && <div className="text-xs text-red-400 bg-red-950/40 border border-red-800/40 rounded-lg px-3 py-2">{err}</div>}
+
+        {/* Last Step-4 live-run error (key invalid / limit reached) */}
+        {tt?.last_error && (
+          <div className="flex items-start gap-2 text-xs text-red-300 bg-red-950/40 border border-red-800/50 rounded-lg px-3 py-2">
+            <span className="flex-shrink-0">⚠</span>
+            <span><strong>Letzter Live-Lauf:</strong> {tt.last_error}</span>
+          </div>
+        )}
 
         {/* Status tiles */}
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
@@ -725,61 +751,68 @@ function TrafficSection() {
           </div>
         )}
 
-        {/* Hidden data-source switch + TomTom API key */}
-        <div className="pt-1">
-          <button onClick={() => setAdvanced(a => !a)}
-                  className="text-[11px] text-slate-500 hover:text-slate-300 transition-colors flex items-center gap-1">
-            <span className="text-slate-600">{advanced ? '▾' : '▸'}</span> Datenquelle &amp; TomTom-API
-          </button>
-          {advanced && tt && (
-            <div className="mt-2 rounded-lg border border-slate-700/50 bg-slate-800/30 p-3 space-y-3">
-              {/* Mode segmented control */}
-              <div>
-                <p className="text-[11px] text-slate-400 mb-1.5">Verkehrsdatenquelle</p>
-                <div className="inline-flex rounded-lg border border-slate-700 overflow-hidden text-xs">
-                  {(['simulation', 'tomtom'] as const).map(m => (
-                    <button key={m} onClick={() => changeMode(m)} disabled={busy}
-                      className={`px-3 py-1.5 font-medium transition-colors ${
-                        tt.mode === m ? 'bg-blue-600 text-white' : 'bg-slate-800 text-slate-400 hover:text-slate-200'}`}>
-                      {m === 'simulation' ? 'Simulation' : 'TomTom Live'}
-                    </button>
-                  ))}
-                </div>
-                {tt.mode === 'tomtom' && tt.key_source === 'none' && (
-                  <p className="text-[10px] text-amber-400 mt-1.5">Kein API-Key hinterlegt — fällt auf Simulation zurück.</p>
-                )}
-              </div>
+        {/* Data source + TomTom API key (always visible) */}
+        {tt && (
+          <div className="rounded-lg border border-slate-700/50 bg-slate-800/30 p-4 space-y-4">
+            <h4 className="text-xs font-semibold text-slate-300">Datenquelle &amp; TomTom-API</h4>
 
-              {/* API key */}
-              <div>
-                <p className="text-[11px] text-slate-400 mb-1.5">
-                  TomTom API-Key
-                  <span className="text-slate-600 ml-1">
-                    {tt.key_source === 'file' ? '· aus .env geladen'
-                      : tt.key_source === 'db' ? '· gespeichert' : '· nicht gesetzt'}
-                  </span>
-                </p>
-                {tt.can_edit ? (
-                  <div className="flex gap-2">
-                    <input type="password" value={keyInput} onChange={e => setKeyInput(e.target.value)}
-                           placeholder={tt.key_masked || 'API-Key eingeben…'}
-                           className="flex-1 bg-slate-900 text-slate-200 text-xs rounded-md px-2.5 py-1.5 border border-slate-700 focus:outline-none focus:border-blue-500" />
-                    <button onClick={saveKey} disabled={busy || !keyInput.trim()}
-                            className="text-xs px-3 py-1.5 rounded-md font-medium bg-blue-600 hover:bg-blue-500 disabled:bg-slate-700 disabled:text-slate-500 text-white transition-colors">
-                      Speichern
-                    </button>
-                  </div>
-                ) : (
-                  <div className="flex items-center gap-2 text-xs text-slate-400">
-                    <code className="bg-slate-900 border border-slate-700 rounded px-2 py-1">{tt.key_masked}</code>
-                    <span className="text-[10px] text-slate-600">per .env gesetzt — Eingabe gesperrt (Datei-Vorrang)</span>
-                  </div>
-                )}
+            {/* Mode segmented control */}
+            <div>
+              <p className="text-[11px] text-slate-400 mb-1.5">Verkehrsdatenquelle</p>
+              <div className="inline-flex rounded-lg border border-slate-700 overflow-hidden text-xs">
+                {(['simulation', 'tomtom'] as const).map(m => (
+                  <button key={m} onClick={() => changeMode(m)} disabled={busy}
+                    className={`px-3 py-1.5 font-medium transition-colors ${
+                      tt.mode === m ? 'bg-blue-600 text-white' : 'bg-slate-800 text-slate-400 hover:text-slate-200'}`}>
+                    {m === 'simulation' ? 'Simulation' : 'TomTom Live'}
+                  </button>
+                ))}
               </div>
+              {tt.mode === 'tomtom' && tt.key_source === 'none' && (
+                <p className="text-[10px] text-amber-400 mt-1.5">Kein API-Key hinterlegt — Live nutzt Freifluss (kein Stau).</p>
+              )}
             </div>
-          )}
-        </div>
+
+            {/* API key — always editable; a saved key overrides .env */}
+            <div>
+              <p className="text-[11px] text-slate-400 mb-1.5">
+                TomTom API-Key
+                <span className="text-slate-600 ml-1">
+                  {tt.key_source === 'file' ? `· aus .env geladen (${tt.key_masked})`
+                    : tt.key_source === 'db' ? `· gespeichert (${tt.key_masked})` : '· nicht gesetzt'}
+                </span>
+              </p>
+              <div className="flex gap-2">
+                <input type="password" value={keyInput} onChange={e => setKeyInput(e.target.value)}
+                       placeholder={tt.key_masked ? `${tt.key_masked} — neuen Key eingeben…` : 'API-Key eingeben…'}
+                       className="flex-1 bg-slate-900 text-slate-200 text-xs rounded-md px-2.5 py-1.5 border border-slate-700 focus:outline-none focus:border-blue-500" />
+                <button onClick={saveKey} disabled={busy || !keyInput.trim()}
+                        className="text-xs px-3 py-1.5 rounded-md font-medium bg-blue-600 hover:bg-blue-500 disabled:bg-slate-700 disabled:text-slate-500 text-white transition-colors">
+                  Speichern
+                </button>
+                <button onClick={testKey} disabled={busy}
+                        className="text-xs px-3 py-1.5 rounded-md font-medium border border-slate-600 text-slate-300 hover:border-slate-400 transition-colors">
+                  Testen
+                </button>
+              </div>
+              <p className="text-[10px] text-slate-600 mt-1">
+                Wird automatisch aus der <code className="text-slate-500">.env</code> gelesen, ist hier aber
+                überschreibbar. Ein gespeicherter Key hat Vorrang; Feld leeren + Speichern → wieder <code className="text-slate-500">.env</code>.
+              </p>
+            </div>
+          </div>
+        )}
       </div>
+
+      {modal && (
+        <ErrorModal
+          title={modal.ok ? 'TomTom-Verbindung OK' : 'TomTom-Verbindung fehlgeschlagen'}
+          variant={modal.ok ? 'success' : 'error'}
+          message={modal.message}
+          detail={modal.detail}
+          onClose={() => setModal(null)}
+        />
+      )}
     </section>
   )
 }

@@ -1,6 +1,6 @@
 import type {
   FullSummary, PipelineStatus, Summary,
-  VehicleConfig, VehicleConfigCreate, SystemConfigEntry, TrafficInfo, TomTomConfig,
+  VehicleConfig, VehicleConfigCreate, SystemConfigEntry, TrafficInfo, TomTomConfig, TomTomTest,
 } from '../types'
 
 async function json<T>(path: string, init?: RequestInit): Promise<T> {
@@ -61,4 +61,5 @@ export const api = {
   getTomTom: () => json<TomTomConfig>('/api/settings/tomtom'),
   setTomTom: (body: { api_key?: string; mode?: 'simulation' | 'tomtom' }) =>
     json<TomTomConfig>('/api/settings/tomtom', jsonPut(body)),
+  testTomTom: () => json<TomTomTest>('/api/settings/tomtom/test', { method: 'POST' }),
 }

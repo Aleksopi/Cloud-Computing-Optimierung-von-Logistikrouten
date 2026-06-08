@@ -105,7 +105,7 @@ def _solve_vrp(
     # Road-network distance matrix (km) over depot + all stops; depot is node 0.
     nodes = [(depot_lat, depot_lon)] + [(s["lat"], s["lon"]) for s in stops]
     dmat = _road_matrix(nodes)
-    tmat = tomtom.matrix_durations_h(tomtom_key, nodes) if use_tomtom else None
+    tmat, hub_traffic_error = (tomtom.matrix_durations_h(tomtom_key, nodes) if use_tomtom else (None, None))
     route_source = "tomtom" if tmat is not None else opt.get("fallback_source", "static")
     for k, s in enumerate(stops, start=1):
         s["_node"] = k
@@ -207,11 +207,42 @@ def _solve_vrp(
                     traffic_factor=route_factor,
                     traffic_source=route_source,
                     free_flow_hours=round(free_flow_h, 3),
+                    traffic_error=hub_traffic_error,   # aggregated by run_routes (not persisted)
                 ))
 
     if remaining:
         logger.warning(f"[Step 4] {depot_name}: {len(remaining)} stops unrouted (capacity/range)")
     return routes
+
+
+def _weighted_vehicle_order(vehicles: list[dict], weights: dict) -> list[dict]:
+    """Order vehicle types by the optimisation weights so the weights actually
+    influence WHICH vehicle is deployed (the per-stop greedy score is distance-
+    proportional and therefore weight-insensitive on its own).
+
+    Combined score per type (lower = deployed first):
+        w_cost·norm(cost_per_km) + w_time·norm(1/speed) + w_env·norm(co2_g_per_km)
+    → cost-focus picks the cheapest, eco the lowest-CO₂, time the fastest first."""
+    if len(vehicles) <= 1:
+        return list(vehicles)
+    costs     = [v["cost_per_km"] for v in vehicles]
+    co2s      = [v["co2_g_per_km"] for v in vehicles]
+    inv_speed = [1.0 / max(1e-6, v["speed_kmh"]) for v in vehicles]
+
+    def _norm(x, xs):
+        lo, hi = min(xs), max(xs)
+        return 0.0 if hi <= lo else (x - lo) / (hi - lo)
+
+    wc = weights.get("weight_cost", 0.40)
+    wt = weights.get("weight_time", 0.35)
+    we = weights.get("weight_env",  0.25)
+
+    def _score(v):
+        return (wc * _norm(v["cost_per_km"], costs)
+                + wt * _norm(1.0 / max(1e-6, v["speed_kmh"]), inv_speed)
+                + we * _norm(v["co2_g_per_km"], co2s))
+
+    return sorted(vehicles, key=_score)
 
 
 def _to_dicts(rows: list[VehicleFleetConfig]) -> list[dict]:
@@ -266,6 +297,10 @@ def run_routes(db) -> None:
         "co2_shadow":  _cf("co2_shadow_chf",  0.12),
     }
 
+    # Optimisation weights now drive the last-mile vehicle choice (eco→low-CO₂,
+    # cost→cheapest, time→fastest deployed first). Backbone stays capacity-first.
+    last_mile_veh = _weighted_vehicle_order(last_mile_veh, base_opt)
+
     def _hub_opt(h: dict) -> dict:
         """Per-hub optimisation context — each city its own shift + traffic factor.
         Simulation → per-hub shift-averaged factor; TomTom/static → the global
@@ -279,7 +314,8 @@ def run_routes(db) -> None:
         else:
             tf = ctx["effective_factor"]
         return {**base_opt, "shift_start": s_start, "shift_hours": s_hours,
-                "traffic_factor": tf, "fallback_source": ctx["source"]}
+                "traffic_factor": tf,
+                "fallback_source": "tomtom_error" if use_tomtom else ctx["source"]}
 
     logger.info(
         f"[Step 4] Last-mile fleet: {[v['name'] for v in last_mile_veh]} | "
@@ -390,6 +426,19 @@ def run_routes(db) -> None:
             )
 
     db.bulk_save_objects([_route_obj(r, "backbone") for r in backbone_routes])
+    db.commit()
+
+    # ── Surface TomTom problems from this run (live mode) for a UI popup ───────
+    if use_tomtom:
+        errs = [r.get("traffic_error") for r in (all_routes + backbone_routes) if r.get("traffic_error")]
+        last_err = errs[0] if errs else ""
+    else:
+        last_err = ""
+    _row = db.query(SystemConfig).filter(SystemConfig.key == "tomtom_last_error").first()
+    if _row:
+        _row.value = last_err
+    else:
+        db.add(SystemConfig(key="tomtom_last_error", value=last_err))
     db.commit()
 
     tk = sum(r["total_km"] for r in all_routes)

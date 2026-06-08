@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { MapView } from './components/Map/MapView'
 import { PipelinePanel } from './components/Pipeline/PipelinePanel'
 import { InfoSidebar } from './components/Sidebar/InfoSidebar'
@@ -6,6 +6,7 @@ import { LayerToggle } from './components/Sidebar/LayerToggle'
 import { HubRoutesPanel } from './components/Sidebar/HubRoutesPanel'
 import { SummaryPage } from './components/Summary/SummaryPage'
 import { SettingsPage } from './components/Settings/SettingsPage'
+import { ErrorModal } from './components/common/ErrorModal'
 import { usePipeline } from './hooks/usePipeline'
 import { api } from './api/client'
 import type { SelectedFeature, HighlightState } from './types'
@@ -18,6 +19,7 @@ export default function App() {
 
   const [selected,          setSelected]          = useState<SelectedFeature | null>(null)
   const [view,              setView]              = useState<View>('map')
+  const [trafficAlert,      setTrafficAlert]      = useState<string | null>(null)
 
   // Hub-Focus-State
   const [focusedHub,        setFocusedHub]        = useState<string | null>(null)
@@ -105,6 +107,16 @@ export default function App() {
 
   useEffect(() => { if (status[1]?.status === 'idle') clearAll() }, [status[1]?.status])
 
+  // After a Step-4 run, surface any TomTom problem (invalid key / limit) as a popup.
+  const lastStep4Fin = useRef<string | null>(null)
+  useEffect(() => {
+    const s4 = status[4]
+    if (s4?.status === 'done' && s4.finished_at && s4.finished_at !== lastStep4Fin.current) {
+      lastStep4Fin.current = s4.finished_at
+      api.getTraffic().then(t => { if (t.last_error) setTrafficAlert(t.last_error) }).catch(() => {})
+    }
+  }, [status[4]?.status, status[4]?.finished_at])
+
   // ── Supply-chain highlight derivation ──────────────────────────────────────
   const chainOf = (name: string): string[] => {
     const info = hubMap.get(name)
@@ -123,14 +135,14 @@ export default function App() {
   const activeHubForHighlight = focusedHub ?? (selected?.type === 'hub' ? (selected.properties.name as string) : null)
 
   const highlight: HighlightState | null = useMemo(() => {
-    const base = { hubs: [] as string[], pharmacyId: null, servingPharmacyId: null, routeId: null, vehicleId: null, primaryHub: null }
+    const base = { hubs: [] as string[], pharmacyId: null, servingPharmacyId: null, chainPharmacyId: null, routeId: null, vehicleId: null, primaryHub: null }
     if (focusedVehicleId) {
       // Use stored hub name — never derive from vehicle_id string (split would mangle "VZ_1")
       return { ...base, hubs: focusedVehicleHub ? chainOf(focusedVehicleHub) : [], vehicleId: focusedVehicleId }
     }
     if (focusedPharmacyId != null) {
-      // "Lieferkette anzeigen" button → full upstream chain (assignment + backbone)
-      return { ...base, hubs: focusedPharmacyHub ? chainOf(focusedPharmacyHub) : [], pharmacyId: focusedPharmacyId }
+      // "Lieferkette anzeigen" button → complete chain (serving route + assignment + backbone)
+      return { ...base, hubs: focusedPharmacyHub ? chainOf(focusedPharmacyHub) : [], chainPharmacyId: focusedPharmacyId }
     }
     if (activeHubForHighlight) {
       // Pure hub focus → colour the hub's own (outbound) routes vs its inbound supply route
@@ -324,6 +336,15 @@ export default function App() {
             setFocusedHub(hubModalName)
           }}
           onClose={() => setHubModalOpen(false)}
+        />
+      )}
+
+      {trafficAlert && (
+        <ErrorModal
+          title="TomTom Live-Verkehr"
+          variant="warning"
+          message={`Beim letzten Schritt-4-Lauf: ${trafficAlert} Die Routen wurden mit Freifluss-Zeiten berechnet.`}
+          onClose={() => setTrafficAlert(null)}
         />
       )}
     </div>

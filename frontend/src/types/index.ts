@@ -19,6 +19,7 @@ export interface HighlightState {
   hubs: string[]              // relevant hub names (the chain)
   pharmacyId: number | null   // highlight a single assignment line (supply-chain view)
   servingPharmacyId: number | null // show only the last-mile route delivering this pharmacy
+  chainPharmacyId: number | null   // full supply chain: serving route + assignment + backbone
   routeId: number | null      // highlight a single vehicle route (numeric id)
   vehicleId: string | null    // highlight/filter a single vehicle_id string
   primaryHub: string | null   // clicked hub → colour its outbound vs inbound supply distinctly
@@ -52,7 +53,13 @@ export interface Summary {
   total_demand: number
   total_routes: number
   total_cost_chf: number
+  warehouse_cost_chf: number
+  total_cost_incl_warehouse_chf: number
   total_km: number
+  total_co2_kg: number
+  cost_per_pharmacy_chf: number
+  traffic_source: TrafficSourceFull
+  traffic_total_delay_min: number
   evan_routes: number
   lkw_routes: number
 }
@@ -91,10 +98,14 @@ export interface SystemConfigEntry {
 
 // ── Live Traffic ──────────────────────────────────────────────────────────────
 
+export type TrafficSourceFull = TrafficSource | 'tomtom_error' | 'tomtom_nokey'
+
 export interface TrafficInfo {
   enabled:            boolean
   mode:               'simulation' | 'tomtom'    // configured data source
-  source:             TrafficSource              // what was actually applied
+  source:             TrafficSourceFull          // what was actually applied
+  error:              string | null              // live error (no key / invalid / limit)
+  last_error?:        string                     // error from the last Step-4 live run
   peak_intensity:     number
   static_factor:      number   // factor applied when live traffic is OFF
   effective_factor:   number   // factor Step 4 actually applies
@@ -109,6 +120,14 @@ export interface TomTomConfig {
   key_source: 'file' | 'db' | 'none'
   key_masked: string
   can_edit:   boolean          // false when a .env key takes precedence
+  last_error?: string          // error from the last Step-4 live run
+}
+
+export interface TomTomTest {
+  ok:         boolean
+  error_type: string | null    // invalid_key | rate_limit | network | no_key | ...
+  message:    string
+  detail?:    string           // full technical detail (HTTP status + raw response)
 }
 
 // ── Analytics Dashboard ───────────────────────────────────────────────────────
@@ -181,6 +200,23 @@ export interface FleetUtilization {
   utilization_pct: number
 }
 
+export interface TrafficByType {
+  routes: number
+  total_delay_min: number
+  avg_factor: number
+  source: TrafficSourceFull | null
+}
+
+export interface TrafficSummary {
+  mode: 'simulation' | 'tomtom'
+  source: TrafficSourceFull
+  error: string | null
+  last_error: string
+  effective_factor: number
+  total_delay_min: number
+  by_type: Record<string, TrafficByType>
+}
+
 export interface FullSummary {
   overview: {
     total_cost_chf: number
@@ -195,6 +231,7 @@ export interface FullSummary {
     hubs_total: number
     traffic_total_delay_min?: number
   }
+  traffic: TrafficSummary
   fleet_by_type: Record<string, FleetStats>
   backbone_by_type: Record<string, FleetStats>
   fleet: {

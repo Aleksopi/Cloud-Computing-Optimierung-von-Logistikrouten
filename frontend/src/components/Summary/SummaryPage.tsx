@@ -17,6 +17,7 @@ const TABS = [
   { id: 'vehicles',    label: 'Last Mile'    },
   { id: 'backbone',    label: 'Hauptlauf'    },
   { id: 'hubs',        label: 'Hubs'         },
+  { id: 'traffic',     label: 'Verkehr'      },
   { id: 'environment', label: 'CO2 & Umwelt' },
 ] as const
 type TabId = typeof TABS[number]['id']
@@ -94,6 +95,7 @@ export function SummaryPage({ pipelineStatus }: SummaryPageProps) {
         {tab === 'vehicles'    && <VehiclesTab    deliverySpecs={deliverySpecs} routesByType={routesByType} fleetUtil={fleet_utilization} />}
         {tab === 'backbone'    && <BackboneTab    data={data} />}
         {tab === 'hubs'        && <HubsTab        data={data} />}
+        {tab === 'traffic'     && <TrafficTab     data={data} />}
         {tab === 'environment' && <EnvironmentTab data={data} deliverySpecs={deliverySpecs} co2Saved={co2Saved} />}
       </div>
     </div>
@@ -123,6 +125,34 @@ function OverviewTab({ data, co2Saved }: { data: FullSummary; co2Saved: number }
 
       {/* Traffic & optimisation context */}
       <TrafficContextCard optimization={optimization} />
+
+      {/* Cost breakdown: transport vs. warehouse */}
+      <Card title="Kostenaufteilung" sub="Transport vs. Lager (gesamt)">
+        {(() => {
+          const transport = overview.total_cost_chf
+          const wh        = overview.warehouse_cost_chf
+          const total     = Math.max(1, transport + wh)
+          return (
+            <>
+              <div className="flex h-6 rounded-lg overflow-hidden border border-slate-700/60">
+                <div className="flex items-center justify-center text-[10px] font-semibold text-white/90"
+                     style={{ width: `${transport / total * 100}%`, backgroundColor: '#3b82f6' }}>
+                  {Math.round(transport / total * 100)}%
+                </div>
+                <div className="flex items-center justify-center text-[10px] font-semibold text-white/90"
+                     style={{ width: `${wh / total * 100}%`, backgroundColor: '#f59e0b' }}>
+                  {Math.round(wh / total * 100)}%
+                </div>
+              </div>
+              <div className="flex flex-wrap gap-4 mt-2 text-xs">
+                <span className="flex items-center gap-1.5 text-slate-400"><span className="w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: '#3b82f6' }} />Transport CHF {fmt(transport, 0)}</span>
+                <span className="flex items-center gap-1.5 text-slate-400"><span className="w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: '#f59e0b' }} />Lager CHF {fmt(wh, 0)}</span>
+                <span className="text-slate-500">Gesamt CHF {fmt(overview.total_cost_incl_warehouse_chf, 0)}</span>
+              </div>
+            </>
+          )
+        })()}
+      </Card>
 
       {/* Fleet summary + utilization */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -510,6 +540,101 @@ function EnvironmentTab({ data, deliverySpecs, co2Saved }: {
             </tbody>
           </table>
         </div>
+      </Card>
+    </div>
+  )
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   TAB: Verkehr (traffic impact)
+══════════════════════════════════════════════════════════════════════════ */
+const SRC_META: Record<string, { label: string; color: string }> = {
+  tomtom:       { label: 'TomTom Live',                color: '#34d399' },
+  tomtom_error: { label: 'TomTom-Fehler → Freifluss', color: '#f87171' },
+  tomtom_nokey: { label: 'Kein Key → Freifluss',      color: '#fbbf24' },
+  simulation:   { label: 'Simulation',                color: '#fbbf24' },
+  static:       { label: 'Statisch',                  color: '#94a3b8' },
+}
+
+function TrafficTab({ data }: { data: FullSummary }) {
+  const t  = data.traffic
+  const sm = SRC_META[t.source] ?? SRC_META.static
+  const byType   = Object.entries(t.by_type)
+  const maxDelay = Math.max(1, ...byType.map(([, s]) => s.total_delay_min))
+  const affected = [...data.individual_routes]
+    .filter(r => (r.traffic_delay_min ?? 0) > 0)
+    .sort((a, b) => (b.traffic_delay_min ?? 0) - (a.traffic_delay_min ?? 0))
+    .slice(0, 10)
+
+  return (
+    <div className="max-w-5xl mx-auto px-6 py-6 space-y-6">
+      {(t.error || t.last_error) && (
+        <div className="rounded-xl border border-red-800/50 bg-red-950/30 px-4 py-3 text-sm text-red-300 flex items-start gap-2">
+          <span className="flex-shrink-0">⚠</span>
+          <span><strong>TomTom:</strong> {t.error || t.last_error} — Routen mit Freifluss-Zeiten berechnet.</span>
+        </div>
+      )}
+
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <div className="rounded-xl border p-4 border-slate-700/50 bg-slate-900/60">
+          <p className="text-xs text-slate-500 mb-1">Datenquelle</p>
+          <p className="text-lg font-bold" style={{ color: sm.color }}>{sm.label}</p>
+          <p className="text-xs text-slate-600 mt-1">Modus: {t.mode === 'tomtom' ? 'TomTom' : 'Simulation'}</p>
+        </div>
+        <KpiCard accent="amber"  label="Ø Verkehrsfaktor"  main={`×${t.effective_factor.toFixed(2)}`} sub={`${asDelay(t.effective_factor)} Fahrzeit`} />
+        <KpiCard accent="blue"   label="Mehrzeit gesamt"   main={`${fmt(t.total_delay_min, 0)} min`} sub="durch Verkehr/Stau" />
+        <KpiCard accent="violet" label="Betroffene Routen" main={`${affected.length}`} sub="mit Mehrzeit > 0" />
+      </div>
+
+      <Card title="Mehrzeit je Fahrzeugtyp" sub="zusätzliche Fahrminuten durch Verkehr + Ø-Faktor">
+        {byType.length === 0 ? <p className="text-xs text-slate-500">Keine Daten.</p> : (
+          <div className="space-y-3">
+            {byType.map(([vt, s], i) => (
+              <div key={vt}>
+                <div className="flex justify-between text-xs mb-1">
+                  <span className="text-slate-300 flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full" style={{ backgroundColor: VCOL(vt, i) }} />
+                    {vt} <span className="text-slate-600">×{s.avg_factor.toFixed(2)}</span>
+                  </span>
+                  <span className="text-slate-400">{fmt(s.total_delay_min, 0)} min · {s.routes} Routen</span>
+                </div>
+                <div className="h-2.5 bg-slate-800 rounded-full overflow-hidden">
+                  <div className="h-full rounded-full" style={{ width: `${(s.total_delay_min / maxDelay) * 100}%`, backgroundColor: VCOL(vt, i) }} />
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </Card>
+
+      <Card title="Am stärksten betroffene Routen" sub="Top 10 nach Verkehrs-Mehrzeit">
+        {affected.length === 0 ? (
+          <p className="text-xs text-slate-500">Keine Routen mit Verkehrsmehrzeit (Modell aus oder Freifluss).</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="text-slate-500 border-b border-slate-800">
+                  {['Fahrzeug-ID', 'Hub', 'Faktor', 'Mehrzeit', 'Strecke', 'Zeit'].map(h => (
+                    <th key={h} className="pb-2 pr-4 text-left font-medium">{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-800/40">
+                {affected.map(r => (
+                  <tr key={r.vehicle_id} className="text-slate-300 hover:bg-slate-800/20">
+                    <td className="py-2 pr-4 font-mono text-slate-300">{r.vehicle_id}</td>
+                    <td className="py-2 pr-4">{r.hub_name}</td>
+                    <td className="py-2 pr-4">×{(r.traffic_factor ?? 1).toFixed(2)}</td>
+                    <td className="py-2 pr-4 text-amber-300 font-medium">+{Math.round(r.traffic_delay_min ?? 0)} min</td>
+                    <td className="py-2 pr-4">{r.total_km} km</td>
+                    <td className="py-2 pr-4">{r.total_hours.toFixed(1)} h</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </Card>
     </div>
   )

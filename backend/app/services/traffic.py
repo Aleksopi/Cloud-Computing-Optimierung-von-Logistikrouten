@@ -115,21 +115,29 @@ def resolve(sys_raw: dict[str, str]) -> dict:
     shift_hours   = _f("shift_hours", 8.0)
     key           = tomtom.resolve_key(sys_raw.get("tomtom_api_key"))
 
+    error: str | None = None
     if not enabled:
         eff, source, cong = round(static_factor, 3), "static", round(static_factor, 3)
-    else:
-        live = tomtom.flow_congestion_factor(key) if mode == "tomtom" else None
-        if live is not None:
-            eff, source, cong = live, "tomtom", live
+    elif mode == "tomtom":
+        # Live mode uses ONLY TomTom — never the simulation. On failure/no key the
+        # factor degrades to free flow (1.0) and the error is surfaced for a popup.
+        factor, err = tomtom.flow_congestion_factor(key)
+        if factor is not None:
+            eff, source, cong = factor, "tomtom", factor
         else:
-            eff = round(shift_average(shift_start, shift_hours, peak), 3)
-            cong = current_congestion(peak)
-            source = "simulation"
+            eff, cong = 1.0, 1.0
+            source = "tomtom_nokey" if not key else "tomtom_error"
+            error = err
+    else:  # simulation
+        eff = round(shift_average(shift_start, shift_hours, peak), 3)
+        cong = current_congestion(peak)
+        source = "simulation"
 
     return {
         "enabled":            enabled,
         "mode":               mode,
         "source":             source,
+        "error":              error,
         "effective_factor":   eff,
         "current_congestion": cong,
         "peak_intensity":     round(peak, 2),
