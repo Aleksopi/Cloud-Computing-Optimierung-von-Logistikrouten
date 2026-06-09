@@ -70,6 +70,26 @@ def get_pharmacies():
     db = SessionLocal()
     try:
         rows = db.query(Pharmacy).all()
+
+        # Which pharmacies are actually delivered by a last-mile vehicle route?
+        # A pharmacy can be assigned to a hub yet remain undeliverable (capacity,
+        # range or opening-hours constraints in Step 4). Only meaningful once
+        # routes exist — before that `served` is None (rendered normally).
+        last_mile = db.query(VehicleRoute).filter(
+            or_(VehicleRoute.supply_tier == "last_mile", VehicleRoute.supply_tier == None)  # noqa: E711
+        ).all()
+        have_routes = len(last_mile) > 0
+        delivered: set[int] = set()
+        for r in last_mile:
+            for sid in (r.stops or []):
+                if isinstance(sid, int):
+                    delivered.add(sid)
+
+        def _served(p) -> bool | None:
+            if not have_routes:
+                return None
+            return p.id in delivered
+
         return {
             "type": "FeatureCollection",
             "features": [
@@ -82,6 +102,7 @@ def get_pharmacies():
                         "city":          p.city or "",
                         "demand":        p.demand,
                         "hub_name":      p.hub_name,
+                        "served":        _served(p),
                         "open_hour":     p.open_hour,
                         "close_hour":    p.close_hour,
                         "opening_hours": f"{_fmt_hour(p.open_hour)} – {_fmt_hour(p.close_hour)}"
@@ -430,6 +451,15 @@ def get_full_summary():
         total_lm_stops = sum(len(r.stops or []) for r in last_mile)
         total_all_co2  = sum(r.co2_kg or 0 for r in all_routes)
 
+        # Pharmacies actually served by a last-mile route vs. assigned-but-undelivered
+        delivered_ids: set[int] = set()
+        for r in last_mile:
+            for sid in (r.stops or []):
+                if isinstance(sid, int):
+                    delivered_ids.add(sid)
+        served_count      = sum(1 for p in pharmacies if p.id in delivered_ids)
+        undelivered_count = sum(1 for p in pharmacies if p.id not in delivered_ids)
+
         # ── Hauptlauf (backbone) fleet stats per vehicle type ─────────────────
         backbone_type_stats: dict[str, dict] = {}
         for r in backbone:
@@ -554,6 +584,8 @@ def get_full_summary():
                 "co2_per_km_kg":         round(total_all_co2  / max(1, sum(r.total_km or 0 for r in all_routes)), 4),
                 "total_driver_hours":    round(sum(r.total_hours or 0 for r in last_mile), 1),
                 "unrouted_pharmacies":   sum(1 for p in pharmacies if not p.hub_name),
+                "served_pharmacies":     served_count,
+                "undelivered_pharmacies": undelivered_count,
                 "hub_loads": [
                     {
                         "name":     h.name,

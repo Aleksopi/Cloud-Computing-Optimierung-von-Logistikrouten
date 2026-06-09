@@ -20,6 +20,7 @@ export default function App() {
   const [selected,          setSelected]          = useState<SelectedFeature | null>(null)
   const [view,              setView]              = useState<View>('map')
   const [trafficAlert,      setTrafficAlert]      = useState<string | null>(null)
+  const [sidebarOpen,       setSidebarOpen]       = useState(true)
 
   // Hub-Focus-State
   const [focusedHub,        setFocusedHub]        = useState<string | null>(null)
@@ -209,6 +210,14 @@ export default function App() {
 
       {/* ── Top bar ──────────────────────────────────────────────────────── */}
       <header className="flex-shrink-0 flex items-center h-12 px-4 bg-slate-900 border-b border-slate-700/60 z-30">
+        <button
+          onClick={() => setSidebarOpen(o => !o)}
+          title={sidebarOpen ? 'Seitenleiste einklappen' : 'Seitenleiste ausklappen'}
+          aria-label={sidebarOpen ? 'Seitenleiste einklappen' : 'Seitenleiste ausklappen'}
+          className="flex items-center justify-center w-7 h-7 mr-3 rounded-md text-slate-400
+                     hover:text-white hover:bg-slate-800 transition-colors">
+          <SidebarIcon className="w-4 h-4" open={sidebarOpen} />
+        </button>
         <div className="flex items-center gap-2.5 mr-6">
           <div className="flex items-center justify-center w-7 h-7 rounded-md bg-blue-600">
             <svg className="w-4 h-4 text-white" viewBox="0 0 20 20" fill="none">
@@ -249,7 +258,9 @@ export default function App() {
 
       {/* ── Body ─────────────────────────────────────────────────────────── */}
       <div className="flex flex-1 overflow-hidden">
-        <aside className="w-64 flex-shrink-0 flex flex-col bg-slate-900 border-r border-slate-700/60 overflow-hidden">
+        <aside className={`flex-shrink-0 flex flex-col bg-slate-900 overflow-hidden
+                           transition-[width] duration-200 ease-in-out
+                           ${sidebarOpen ? 'w-64 border-r border-slate-700/60' : 'w-0'}`}>
           <PipelinePanel status={status} onRunStep={runStep}
             onReset={() => { reset(); clearAll() }}
             loading={loading} error={error} />
@@ -351,6 +362,15 @@ export default function App() {
   )
 }
 
+function SidebarIcon({ className, open }: { className?: string; open: boolean }) {
+  return <svg className={className} viewBox="0 0 16 16" fill="none">
+    <rect x="1.5" y="2.5" width="13" height="11" rx="1.5" stroke="currentColor" strokeWidth="1.3"/>
+    <line x1="6" y1="2.5" x2="6" y2="13.5" stroke="currentColor" strokeWidth="1.3"/>
+    {open
+      ? <path d="M11.5 6 L9.5 8 L11.5 10" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
+      : <path d="M9 6 L11 8 L9 10" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>}
+  </svg>
+}
 function MapIcon({ className }: { className?: string }) {
   return <svg className={className} viewBox="0 0 16 16" fill="none">
     <path d="M5 2L1 4v10l4-2 6 2 4-2V2L15 4 9 2 5 2Z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/>

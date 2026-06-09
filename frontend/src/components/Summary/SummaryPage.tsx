@@ -83,6 +83,9 @@ export function SummaryPage({ pipelineStatus }: SummaryPageProps) {
         ))}
         <div className="ml-auto flex items-center gap-3 text-xs text-slate-500 pb-2">
           {overview.pharmacies_assigned}/{overview.pharmacies_total} Apotheken
+          {metrics.undelivered_pharmacies > 0 && (
+            <span className="text-red-400">· {metrics.undelivered_pharmacies} nicht belieferbar</span>
+          )}
           {metrics.unrouted_pharmacies > 0 && (
             <span className="text-amber-400">· {metrics.unrouted_pharmacies} nicht zugewiesen</span>
           )}
@@ -193,7 +196,7 @@ function OverviewTab({ data, co2Saved }: { data: FullSummary; co2Saved: number }
 
         <Card title="Kennzahlen">
           <div className="space-y-2">
-            {[
+            {([
               ['Durchschn. Stops / Route',  `${fmt(metrics.avg_stops_per_route)}`],
               ['Durchschn. Distanz / Route', `${fmt(metrics.avg_km_per_route)} km`],
               ['Kosten pro Einheit',          `CHF ${fmt(metrics.cost_per_item_chf, 2)}`],
@@ -201,11 +204,15 @@ function OverviewTab({ data, co2Saved }: { data: FullSummary; co2Saved: number }
               ['Gesamtkosten inkl. Lager',    `CHF ${fmt(overview.total_cost_incl_warehouse_chf, 0)}`],
               ['CO2 pro km (gesamt)',         `${fmt(metrics.co2_per_km_kg * 1000, 1)} g/km`],
               ['Gesamte Fahrstunden',         `${fmt(metrics.total_driver_hours)} h`],
-              ['Nicht zugewiesene Apotheken', `${metrics.unrouted_pharmacies}`],
-            ].map(([l, v]) => (
+              ['Belieferte Apotheken',        `${metrics.served_pharmacies}`],
+              ['Nicht belieferbare Apotheken', `${metrics.undelivered_pharmacies}`,
+                metrics.undelivered_pharmacies > 0 ? 'text-red-400' : undefined],
+              ['Nicht zugewiesene Apotheken', `${metrics.unrouted_pharmacies}`,
+                metrics.unrouted_pharmacies > 0 ? 'text-amber-400' : undefined],
+            ] as [string, string, string?][]).map(([l, v, cls]) => (
               <div key={l} className="flex justify-between text-xs">
                 <span className="text-slate-500">{l}</span>
-                <span className="text-slate-300 font-medium">{v}</span>
+                <span className={`font-medium ${cls ?? 'text-slate-300'}`}>{v}</span>
               </div>
             ))}
           </div>
@@ -365,8 +372,25 @@ function BackboneTab({ data }: { data: FullSummary }) {
 ══════════════════════════════════════════════════════════════════════════ */
 function HubsTab({ data }: { data: FullSummary }) {
   const { metrics, supply_chain, vehicle_specs } = data
+
+  // Distribution hubs only (VZ + mVZ) — these carry the ≥10 % utilisation rule.
+  const dist     = metrics.hub_loads.filter(h => h.hub_type !== 'HQ')
+  const vzCount  = dist.filter(h => h.hub_type === 'VZ').length
+  const mvzCount = dist.filter(h => h.hub_type === 'mVZ').length
+  const utils    = dist.map(h => h.pct)
+  const avgU     = utils.length ? utils.reduce((a, b) => a + b, 0) / utils.length : 0
+  const minU     = utils.length ? Math.min(...utils) : 0
+
   return (
     <div className="max-w-5xl mx-auto px-6 py-6 space-y-6">
+      {/* Hub distribution summary */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <KpiCard accent="blue"   label="Verteilzentren (VZ)" main={`${vzCount}`} sub="automatisch 4–6" />
+        <KpiCard accent="amber"  label="Mini-VZ (mVZ)"       main={`${mvzCount}`} sub="dynamisch nach Bedarf" />
+        <KpiCard accent="green"  label="Ø Lagerauslastung"   main={`${fmt(avgU)}%`} sub={`${dist.length} Verteil-Hubs`} />
+        <KpiCard accent="violet" label="Min. Auslastung"     main={`${fmt(minU)}%`} sub="Zieluntergrenze 10%" />
+      </div>
+
       {/* Hub loads */}
       <Card title="Lagerauslastung & -kosten" sub="alle Hubs · Lagerkosten standortabhängig (dichter = teurer)">
         <div className="overflow-x-auto">
@@ -570,7 +594,7 @@ function TrafficTab({ data }: { data: FullSummary }) {
     <div className="max-w-5xl mx-auto px-6 py-6 space-y-6">
       {(t.error || t.last_error) && (
         <div className="rounded-xl border border-red-800/50 bg-red-950/30 px-4 py-3 text-sm text-red-300 flex items-start gap-2">
-          <span className="flex-shrink-0">⚠</span>
+          <WarnIcon className="w-4 h-4 flex-shrink-0 mt-0.5" />
           <span><strong>TomTom:</strong> {t.error || t.last_error} — Routen mit Freifluss-Zeiten berechnet.</span>
         </div>
       )}
@@ -673,6 +697,16 @@ function KpiCard({ label, main, sub, accent }: { label: string; main: string; su
       <p className={`text-xl font-bold ${a.text}`}>{main}</p>
       <p className="text-xs text-slate-600 mt-1">{sub}</p>
     </div>
+  )
+}
+
+function WarnIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 16 16" fill="none" aria-hidden="true">
+      <path d="M8 2 L15 14 H1 Z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" />
+      <line x1="8" y1="6.5" x2="8" y2="10" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+      <circle cx="8" cy="11.8" r="0.7" fill="currentColor" />
+    </svg>
   )
 }
 

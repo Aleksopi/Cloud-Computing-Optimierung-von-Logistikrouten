@@ -267,6 +267,8 @@ export interface FullSummary {
     co2_per_km_kg: number
     total_driver_hours: number
     unrouted_pharmacies: number
+    served_pharmacies: number
+    undelivered_pharmacies: number
     hub_loads: HubLoad[]
   }
   fleet_utilization: Record<string, FleetUtilization>
