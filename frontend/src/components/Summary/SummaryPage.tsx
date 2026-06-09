@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { api } from '../../api/client'
 import type { FullSummary, PipelineStatus, VzStats, VehicleConfig, IndividualRoute, HubLoad } from '../../types'
 import { COLORS, VEHICLE_ROUTE_COLOR } from '../Map/MapView'
+import { DetailModal, type DetailSubject } from '../common/DetailModal'
 
 interface SummaryPageProps { pipelineStatus: PipelineStatus }
 
@@ -17,6 +18,7 @@ const TABS = [
   { id: 'vehicles',    label: 'Last Mile'    },
   { id: 'backbone',    label: 'Hauptlauf'    },
   { id: 'hubs',        label: 'Hubs'         },
+  { id: 'coverage',    label: 'Belieferung'  },
   { id: 'traffic',     label: 'Verkehr'      },
   { id: 'environment', label: 'CO2 & Umwelt' },
 ] as const
@@ -27,6 +29,7 @@ export function SummaryPage({ pipelineStatus }: SummaryPageProps) {
   const [loading, setLoading] = useState(false)
   const [error, setError]     = useState<string | null>(null)
   const [tab, setTab]         = useState<TabId>('overview')
+  const [detail, setDetail]   = useState<DetailSubject | null>(null)
   const step4Done = pipelineStatus[4]?.status === 'done'
 
   useEffect(() => {
@@ -95,12 +98,15 @@ export function SummaryPage({ pipelineStatus }: SummaryPageProps) {
       {/* Tab content */}
       <div className="flex-1 overflow-y-auto">
         {tab === 'overview'    && <OverviewTab    data={data} co2Saved={co2Saved} />}
-        {tab === 'vehicles'    && <VehiclesTab    deliverySpecs={deliverySpecs} routesByType={routesByType} fleetUtil={fleet_utilization} />}
-        {tab === 'backbone'    && <BackboneTab    data={data} />}
-        {tab === 'hubs'        && <HubsTab        data={data} />}
+        {tab === 'vehicles'    && <VehiclesTab    deliverySpecs={deliverySpecs} routesByType={routesByType} fleetUtil={fleet_utilization} onDetail={setDetail} />}
+        {tab === 'backbone'    && <BackboneTab    data={data} onDetail={setDetail} />}
+        {tab === 'hubs'        && <HubsTab        data={data} onDetail={setDetail} />}
+        {tab === 'coverage'    && <CoverageTab    data={data} />}
         {tab === 'traffic'     && <TrafficTab     data={data} />}
         {tab === 'environment' && <EnvironmentTab data={data} deliverySpecs={deliverySpecs} co2Saved={co2Saved} />}
       </div>
+
+      {detail && <DetailModal subject={detail} onClose={() => setDetail(null)} />}
     </div>
   )
 }
@@ -241,10 +247,11 @@ function OverviewTab({ data, co2Saved }: { data: FullSummary; co2Saved: number }
 /* ══════════════════════════════════════════════════════════════════════════
    TAB: Fahrzeuge
 ══════════════════════════════════════════════════════════════════════════ */
-function VehiclesTab({ deliverySpecs, routesByType, fleetUtil }: {
+function VehiclesTab({ deliverySpecs, routesByType, fleetUtil, onDetail }: {
   deliverySpecs: VehicleConfig[]
   routesByType: Record<string, IndividualRoute[]>
   fleetUtil: Record<string, import('../../types').FleetUtilization>
+  onDetail: (s: DetailSubject) => void
 }) {
   return (
     <div className="max-w-6xl mx-auto px-6 py-6 space-y-6">
@@ -295,7 +302,7 @@ function VehiclesTab({ deliverySpecs, routesByType, fleetUtil }: {
         const routes = routesByType[spec.name] ?? []
         if (!routes.length) return null
         return (
-          <VehicleTypeGroup key={spec.id} type={spec.name} routes={routes} color={VCOL(spec.name, i)} />
+          <VehicleTypeGroup key={spec.id} type={spec.name} routes={routes} color={VCOL(spec.name, i)} onDetail={onDetail} />
         )
       })}
     </div>
@@ -305,7 +312,7 @@ function VehiclesTab({ deliverySpecs, routesByType, fleetUtil }: {
 /* ══════════════════════════════════════════════════════════════════════════
    TAB: Hauptlauf (backbone — Hub ↔ Hub)
 ══════════════════════════════════════════════════════════════════════════ */
-function BackboneTab({ data }: { data: FullSummary }) {
+function BackboneTab({ data, onDetail }: { data: FullSummary; onDetail: (s: DetailSubject) => void }) {
   const { backbone_by_type, fleet, individual_backbone_routes } = data
   const routesByType = groupBy(individual_backbone_routes, r => r.vehicle_type)
   const types = Object.keys(routesByType).sort()
@@ -361,7 +368,7 @@ function BackboneTab({ data }: { data: FullSummary }) {
 
       {/* Per-type route detail */}
       {types.map((t, i) => (
-        <VehicleTypeGroup key={t} type={t} routes={routesByType[t]} color={VCOL(t, i)} />
+        <VehicleTypeGroup key={t} type={t} routes={routesByType[t]} color={VCOL(t, i)} onDetail={onDetail} />
       ))}
     </div>
   )
@@ -370,7 +377,7 @@ function BackboneTab({ data }: { data: FullSummary }) {
 /* ══════════════════════════════════════════════════════════════════════════
    TAB: Hubs
 ══════════════════════════════════════════════════════════════════════════ */
-function HubsTab({ data }: { data: FullSummary }) {
+function HubsTab({ data, onDetail }: { data: FullSummary; onDetail: (s: DetailSubject) => void }) {
   const { metrics, supply_chain, vehicle_specs } = data
 
   // Distribution hubs only (VZ + mVZ) — these carry the ≥10 % utilisation rule.
@@ -392,7 +399,7 @@ function HubsTab({ data }: { data: FullSummary }) {
       </div>
 
       {/* Hub loads */}
-      <Card title="Lagerauslastung & -kosten" sub="alle Hubs · Lagerkosten standortabhängig (dichter = teurer)">
+      <Card title="Lagerauslastung & -kosten" sub="Hub anklicken für Details · Lagerkosten standortabhängig (dichter = teurer)">
         <div className="overflow-x-auto">
           <table className="w-full text-xs">
             <thead>
@@ -404,8 +411,13 @@ function HubsTab({ data }: { data: FullSummary }) {
             </thead>
             <tbody className="divide-y divide-slate-800/40">
               {metrics.hub_loads.map(h => (
-                <tr key={h.name} className="text-slate-300 hover:bg-slate-800/20">
-                  <td className="py-2 pr-4 font-medium text-slate-200">{h.name}</td>
+                <tr key={h.name} onClick={() => onDetail({ kind: 'hub', data: h })}
+                    title="Details anzeigen"
+                    className="text-slate-300 hover:bg-slate-800/40 cursor-pointer transition-colors">
+                  <td className="py-2 pr-4 font-medium text-slate-200">
+                    <span className="text-blue-300 hover:underline">{h.name}</span>
+                    {h.city && <span className="text-slate-500 ml-1.5">· {h.city}</span>}
+                  </td>
                   <td className="py-2 pr-4 text-slate-500 text-xs">{h.hub_type}</td>
                   <td className="py-2 pr-4">{h.load} / {h.capacity} Einh.</td>
                   <td className="py-2 pr-4">
@@ -477,6 +489,81 @@ function HubsTab({ data }: { data: FullSummary }) {
           {supply_chain.hierarchy.map(vz => <VzRow key={vz.name} vz={vz} />)}
         </div>
       </Card>
+    </div>
+  )
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   TAB: Belieferung (coverage — why pharmacies can/can't be supplied)
+══════════════════════════════════════════════════════════════════════════ */
+function CoverageTab({ data }: { data: FullSummary }) {
+  const { metrics, overview } = data
+  const list    = metrics.undelivered_list ?? []
+  const reasons = Object.entries(groupBy(list, e => e.reason)).sort((a, b) => b[1].length - a[1].length)
+  const total   = overview.pharmacies_total
+  const served  = metrics.served_pharmacies
+  const pct     = total ? Math.round((served / total) * 100) : 0
+
+  return (
+    <div className="max-w-5xl mx-auto px-6 py-6 space-y-6">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <KpiCard accent="green"  label="Belieferte Apotheken" main={`${served}`} sub={`${pct}% von ${total}`} />
+        <KpiCard accent="amber"  label="Nicht belieferbar"    main={`${metrics.undelivered_pharmacies}`} sub="Gründe siehe unten" />
+        <KpiCard accent="violet" label="Nicht zugewiesen"     main={`${metrics.unrouted_pharmacies}`} sub="keinem Hub zugeordnet" />
+        <KpiCard accent="blue"   label="Apotheken gesamt"     main={`${total}`} sub="Schweiz" />
+      </div>
+
+      <Card title="Abdeckung" sub={`${served} von ${total} Apotheken werden beliefert`}>
+        <div className="flex h-6 rounded-lg overflow-hidden border border-slate-700/60">
+          <div className="bg-emerald-500 flex items-center justify-center text-[10px] font-semibold text-white/90"
+               style={{ width: `${pct}%` }}>{pct >= 8 ? `${pct}%` : ''}</div>
+          {pct < 100 && <div className="bg-red-500/70 flex-1 flex items-center justify-center text-[10px] font-semibold text-white/90">{100 - pct}%</div>}
+        </div>
+        <div className="flex gap-4 mt-2 text-xs text-slate-400">
+          <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm bg-emerald-500" />Beliefert</span>
+          <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm bg-red-500/70" />Nicht beliefert</span>
+        </div>
+      </Card>
+
+      {list.length === 0 ? (
+        <Card title="Vollständige Belieferung">
+          <p className="text-sm text-emerald-400">✓ Jede zugewiesene Apotheke wird von mindestens einer Route bedient.</p>
+        </Card>
+      ) : (
+        <>
+          <div className="rounded-xl border border-amber-700/40 bg-amber-950/10 px-4 py-3 text-xs text-amber-200/90 leading-relaxed">
+            <strong>Tipp:</strong> Unter <strong>Einstellungen → Parameter → „Alle Apotheken beliefern"</strong> lässt
+            sich eine garantierte Belieferung erzwingen. Zwangslieferungen ignorieren dabei Schicht- und
+            Öffnungszeit-Grenzen, damit keine Apotheke offen bleibt — danach Schritt 4 erneut ausführen.
+          </div>
+
+          {reasons.map(([reason, entries]) => (
+            <Card key={reason} title={reason} sub={`${entries.length} Apotheke${entries.length !== 1 ? 'n' : ''}`}>
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="text-slate-500 border-b border-slate-800">
+                      {['Apotheke', 'Stadt', 'Hub', 'Bedarf'].map(h => (
+                        <th key={h} className="pb-2 pr-4 text-left font-medium">{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-800/40">
+                    {entries.map(e => (
+                      <tr key={e.id} className="text-slate-300 hover:bg-slate-800/20">
+                        <td className="py-2 pr-4 font-medium text-slate-200">{e.name || `#${e.id}`}</td>
+                        <td className="py-2 pr-4 text-slate-400">{e.city || '—'}</td>
+                        <td className="py-2 pr-4 text-slate-400">{e.hub_name ?? '—'}</td>
+                        <td className="py-2 pr-4 text-slate-400">{e.demand != null ? `${e.demand} Einh.` : '—'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </Card>
+          ))}
+        </>
+      )}
     </div>
   )
 }
@@ -792,7 +879,9 @@ function Metric({ label, value, color, hint }: { label: string; value: string; c
   )
 }
 
-function VehicleTypeGroup({ type, routes, color }: { type: string; routes: IndividualRoute[]; color: string }) {
+function VehicleTypeGroup({ type, routes, color, onDetail }: {
+  type: string; routes: IndividualRoute[]; color: string; onDetail?: (s: DetailSubject) => void
+}) {
   const [open, setOpen] = useState(true)
   const totals = {
     km:    routes.reduce((s, r) => s + r.total_km,        0),
@@ -838,8 +927,10 @@ function VehicleTypeGroup({ type, routes, color }: { type: string; routes: Indiv
             </thead>
             <tbody className="divide-y divide-slate-800/30">
               {routes.map(r => (
-                <tr key={r.vehicle_id} className="text-slate-400 hover:bg-slate-800/20 hover:text-slate-300 transition-colors">
-                  <td className="py-1.5 pr-3 font-mono text-slate-300 text-xs">{r.vehicle_id}</td>
+                <tr key={r.vehicle_id} onClick={() => onDetail?.({ kind: 'vehicle', data: r })}
+                    title="Details anzeigen"
+                    className="text-slate-400 hover:bg-slate-800/40 hover:text-slate-300 cursor-pointer transition-colors">
+                  <td className="py-1.5 pr-3 font-mono text-blue-300 text-xs hover:underline">{r.vehicle_id}</td>
                   <td className="py-1.5 pr-3">{r.hub_name}</td>
                   <td className="py-1.5 pr-3 font-medium text-slate-300">{r.restock_count + 1}</td>
                   <td className="py-1.5 pr-3">{r.stop_count}</td>

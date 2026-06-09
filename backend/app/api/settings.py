@@ -7,6 +7,7 @@ from __future__ import annotations
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
+from app.db.init_db import DEFAULT_SYSTEM_CONFIG, DEFAULT_VEHICLES
 from app.db.models import SystemConfig, VehicleFleetConfig
 from app.db.session import SessionLocal
 from app.services import tomtom
@@ -132,6 +133,40 @@ def update_system_config(body: SystemConfigBody):
         db.commit()
         rows = db.query(SystemConfig).all()
         return [_config_dict(c) for c in rows]
+    finally:
+        db.close()
+
+
+@router.post("/reset")
+def reset_settings():
+    """Restore the factory defaults — system parameters/weights AND the vehicle
+    fleet. The saved TomTom API key (and its last error) are preserved so the
+    user does not lose their credentials. Pipeline results are untouched."""
+    preserve = {"tomtom_api_key", "tomtom_last_error"}
+    db = SessionLocal()
+    try:
+        # System config → default values (insert missing, reset existing).
+        existing = {c.key: c for c in db.query(SystemConfig).all()}
+        for key, value, label, description in DEFAULT_SYSTEM_CONFIG:
+            if key in preserve:
+                continue
+            row = existing.get(key)
+            if row:
+                row.value, row.label, row.description = value, label, description
+            else:
+                db.add(SystemConfig(key=key, value=value, label=label, description=description))
+
+        # Vehicle fleet → wipe and reseed the canonical line-up.
+        db.query(VehicleFleetConfig).delete()
+        for v in DEFAULT_VEHICLES:
+            db.add(VehicleFleetConfig(**v))
+        db.commit()
+
+        return {
+            "vehicles": [_vehicle_dict(v) for v in
+                         db.query(VehicleFleetConfig).order_by(VehicleFleetConfig.sort_order).all()],
+            "system":   [_config_dict(c) for c in db.query(SystemConfig).all()],
+        }
     finally:
         db.close()
 

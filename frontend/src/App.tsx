@@ -7,6 +7,7 @@ import { HubRoutesPanel } from './components/Sidebar/HubRoutesPanel'
 import { SummaryPage } from './components/Summary/SummaryPage'
 import { SettingsPage } from './components/Settings/SettingsPage'
 import { ErrorModal } from './components/common/ErrorModal'
+import { DetailModal, type DetailSubject } from './components/common/DetailModal'
 import { usePipeline } from './hooks/usePipeline'
 import { api } from './api/client'
 import type { SelectedFeature, HighlightState } from './types'
@@ -21,6 +22,7 @@ export default function App() {
   const [view,              setView]              = useState<View>('map')
   const [trafficAlert,      setTrafficAlert]      = useState<string | null>(null)
   const [sidebarOpen,       setSidebarOpen]       = useState(true)
+  const [detailSubject,     setDetailSubject]     = useState<DetailSubject | null>(null)
 
   // Hub-Focus-State
   const [focusedHub,        setFocusedHub]        = useState<string | null>(null)
@@ -326,6 +328,7 @@ export default function App() {
                   onFocusHub={h => { setFocusedHub(h); if (!h) { setFocusedVehicleId(null); setFocusedPharmacyId(null) } }}
                   onOpenHubPanel={openHubPanel}
                   onPharmacyChain={handlePharmacyChain}
+                  onShowDetail={setDetailSubject}
                 />
               </div>
             )}
@@ -348,6 +351,10 @@ export default function App() {
           }}
           onClose={() => setHubModalOpen(false)}
         />
+      )}
+
+      {detailSubject && (
+        <DetailModal subject={detailSubject} onClose={() => setDetailSubject(null)} />
       )}
 
       {trafficAlert && (

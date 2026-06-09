@@ -34,6 +34,20 @@ def _window(start_h: float | None, hours: float | None) -> str:
     return f"{_fmt_hour(start_h)} – {_fmt_hour(min(start_h + hours, 24.0))} Uhr"
 
 
+def _hub_city_map(pharmacies) -> dict[str, str]:
+    """Representative city per hub = the most common city among its pharmacies.
+
+    Hubs are placed at pharmacy coordinates and have no own city, so for the
+    'von Stadt → nach Stadt' route labels we infer one from the pharmacies the
+    hub serves directly."""
+    from collections import Counter
+    counters: dict[str, Counter] = defaultdict(Counter)
+    for p in pharmacies:
+        if p.hub_name and p.city:
+            counters[p.hub_name][p.city] += 1
+    return {hub: c.most_common(1)[0][0] for hub, c in counters.items() if c}
+
+
 def _optimization_block(sys_raw: dict[str, str]) -> dict:
     """Optimisation weights + the traffic context (simulation ↔ TomTom) used by Step 4."""
     def _f(key: str, default: float) -> float:
@@ -103,6 +117,7 @@ def get_pharmacies():
                         "demand":        p.demand,
                         "hub_name":      p.hub_name,
                         "served":        _served(p),
+                        "undeliverable_reason": p.undeliverable_reason,
                         "open_hour":     p.open_hour,
                         "close_hour":    p.close_hour,
                         "opening_hours": f"{_fmt_hour(p.open_hour)} – {_fmt_hour(p.close_hour)}"
@@ -151,6 +166,7 @@ def get_hubs():
 
         g_shift_start = float(sys_raw.get("shift_start", "8.0"))
         g_shift_hours = float(sys_raw.get("shift_hours", "8.0"))
+        hub_city = _hub_city_map(all_pharmacies)
 
         def _hub_shift(h):
             return (h.shift_start if h.shift_start is not None else g_shift_start,
@@ -166,6 +182,7 @@ def get_hubs():
                         "id":              h.id,
                         "name":            h.name,
                         "hub_type":        h.hub_type,
+                        "city":            hub_city.get(h.name, ""),
                         "parent_hub":      h.parent_hub,
                         "capacity":        h.capacity,
                         "load":            load.get(h.name, 0),
@@ -225,9 +242,14 @@ def get_routes():
         rows = db.query(VehicleRoute).filter(
             or_(VehicleRoute.supply_tier == "last_mile", VehicleRoute.supply_tier == None)  # noqa: E711
         ).all()
+        pharmacies = db.query(Pharmacy).all()
+        pharm_by_id = {p.id: p for p in pharmacies}
+        hub_city = _hub_city_map(pharmacies)
         features = []
         for r in rows:
             if r.stop_coords and len(r.stop_coords) >= 2:
+                stop_ph   = [pharm_by_id.get(sid) for sid in (r.stops or [])]
+                to_cities = list(dict.fromkeys(p.city for p in stop_ph if p and p.city))
                 features.append(
                     {
                         "type": "Feature",
@@ -244,6 +266,10 @@ def get_routes():
                             "co2_kg": r.co2_kg,
                             "stops": r.stops or [],          # pharmacy ids — map filter: pharmacy → route
                             "stop_count": len(r.stops) if r.stops else 0,
+                            "stop_names": [p.name or p.city or f"#{p.id}" for p in stop_ph if p],
+                            "from_city": hub_city.get(r.hub_name, ""),
+                            "to_cities": to_cities,
+                            "forced": bool(r.forced),
                             "restock_count": r.restock_count,
                             "traffic_factor": r.traffic_factor,
                             "traffic_source": r.traffic_source,
@@ -263,6 +289,7 @@ def get_backbone():
     try:
         hq = db.query(Hub).filter(Hub.hub_type == "HQ").first()
         hq_name = hq.name if hq else ""
+        hub_city = _hub_city_map(db.query(Pharmacy).all())
         rows = db.query(VehicleRoute).filter(VehicleRoute.supply_tier == "backbone").all()
         features = []
         for r in rows:
@@ -270,6 +297,7 @@ def get_backbone():
                 # tier: "hq_vz" for HQ→VZ routes, "vz_mvz" for VZ→mVZ routes
                 tier = "hq_vz" if r.hub_name == hq_name else "vz_mvz"
                 to_hubs = [str(s) for s in (r.stops or [])]
+                to_cities = list(dict.fromkeys(hub_city.get(h, "") for h in to_hubs if hub_city.get(h)))
                 features.append(
                     {
                         "type": "Feature",
@@ -278,7 +306,9 @@ def get_backbone():
                             "id":            r.id,
                             "hub_name":      r.hub_name,
                             "from_hub":      r.hub_name,
+                            "from_city":     hub_city.get(r.hub_name, ""),
                             "to_hubs":       to_hubs,
+                            "to_cities":     to_cities,
                             "stop_count":    len(to_hubs),
                             "vehicle_id":    r.vehicle_id,
                             "vehicle_type":  r.vehicle_type,
@@ -341,6 +371,17 @@ def get_full_summary():
         all_routes = db.query(VehicleRoute).all()
         vehicles   = db.query(VehicleFleetConfig).order_by(VehicleFleetConfig.sort_order).all()
         sys_raw    = {c.key: c.value for c in db.query(SystemConfig).all()}
+        pharm_by_id = {p.id: p for p in pharmacies}
+        hub_city    = _hub_city_map(pharmacies)
+
+        def _route_cities(r):
+            """(from_city, to_cities) for a last-mile or backbone route."""
+            if r.supply_tier == "backbone":
+                tos = [hub_city.get(str(s), "") for s in (r.stops or [])]
+            else:
+                tos = [pharm_by_id[s].city for s in (r.stops or [])
+                       if s in pharm_by_id and pharm_by_id[s].city]
+            return hub_city.get(r.hub_name, ""), list(dict.fromkeys(c for c in tos if c))
 
         last_mile = [r for r in all_routes if r.supply_tier in (None, "last_mile")]
         backbone  = [r for r in all_routes if r.supply_tier == "backbone"]
@@ -481,7 +522,9 @@ def get_full_summary():
                 "vehicle_type":  r.vehicle_type,
                 "hub_name":      r.hub_name,
                 "from_hub":      r.hub_name,
+                "from_city":     _route_cities(r)[0],
                 "to_hubs":       [str(x) for x in (r.stops or [])],
+                "to_cities":     _route_cities(r)[1],
                 "tier":          "hq_vz" if r.hub_name == hq_name else "vz_mvz",
                 "stop_count":    len(r.stops or []),
                 "total_km":      round(r.total_km or 0, 2),
@@ -519,6 +562,48 @@ def get_full_summary():
             s["avg_factor"]      = round(s["_drive"] / s["_ff"], 3) if s["_ff"] > 1e-6 else 1.0
             s["total_delay_min"] = round(s["total_delay_min"], 1)
             del s["_ff"], s["_drive"]
+
+        # ── Per-hub route stats + shift (for the clickable hub detail popup) ───
+        g_shift_start = float(sys_raw.get("shift_start", "8.0"))
+        g_shift_hours = float(sys_raw.get("shift_hours", "8.0"))
+        hub_route_stats: dict[str, dict] = defaultdict(
+            lambda: {"vehicle_counts": {}, "total_km": 0.0, "total_items": 0})
+        for r in last_mile:
+            s = hub_route_stats[r.hub_name]
+            vt = r.vehicle_type or "—"
+            s["vehicle_counts"][vt] = s["vehicle_counts"].get(vt, 0) + 1
+            s["total_km"]    += r.total_km or 0
+            s["total_items"] += r.total_items or 0
+
+        def _hub_detail(h) -> dict:
+            ss = h.shift_start if h.shift_start is not None else g_shift_start
+            sh = h.shift_hours if h.shift_hours is not None else g_shift_hours
+            rs = hub_route_stats.get(h.name, {"vehicle_counts": {}, "total_km": 0.0, "total_items": 0})
+            return {
+                "city":            hub_city.get(h.name, ""),
+                "parent_hub":      h.parent_hub,
+                "pharmacy_count":  len(pharm_by_hub.get(h.name, [])),
+                "delivery_window": _window(ss, sh),
+                "opening_hours":   (f"{_fmt_hour(h.open_hour)} – {_fmt_hour(h.close_hour)}"
+                                    if h.open_hour is not None else "—"),
+                "vehicle_counts":  rs["vehicle_counts"],
+                "route_km":        round(rs["total_km"], 1),
+                "route_items":     rs["total_items"],
+            }
+
+        # ── Assigned-but-undeliverable pharmacies (with the Step-4 reason) ─────
+        undelivered_list = sorted([
+            {
+                "id":       p.id,
+                "name":     p.name or "",
+                "city":     p.city or "",
+                "hub_name": p.hub_name,
+                "demand":   p.demand,
+                "reason":   (p.undeliverable_reason
+                             or ("Keinem Hub zugewiesen" if not p.hub_name else "Nicht beliefert")),
+            }
+            for p in pharmacies if p.id not in delivered_ids
+        ], key=lambda x: (x["reason"], x["city"], x["name"]))
 
         return {
             "overview": {
@@ -586,6 +671,7 @@ def get_full_summary():
                 "unrouted_pharmacies":   sum(1 for p in pharmacies if not p.hub_name),
                 "served_pharmacies":     served_count,
                 "undelivered_pharmacies": undelivered_count,
+                "undelivered_list":      undelivered_list,
                 "hub_loads": [
                     {
                         "name":     h.name,
@@ -595,6 +681,7 @@ def get_full_summary():
                         "pct":      round(100 * load_per_hub.get(h.name, 0) / h.capacity, 1)
                                     if h.capacity else 0,
                         "warehouse_cost": round(h.warehouse_cost, 2) if h.warehouse_cost is not None else None,
+                        **_hub_detail(h),
                     }
                     for h in sorted(all_hubs, key=lambda x: (x.hub_type, x.name))
                 ],
@@ -606,6 +693,9 @@ def get_full_summary():
                     "vehicle_id":    r.vehicle_id,
                     "vehicle_type":  r.vehicle_type,
                     "hub_name":      r.hub_name,
+                    "from_city":     _route_cities(r)[0],
+                    "to_cities":     _route_cities(r)[1],
+                    "forced":        bool(r.forced),
                     "stop_count":    len(r.stops or []),
                     "total_km":      round(r.total_km or 0, 2),
                     "total_hours":   round(r.total_hours or 0, 2),

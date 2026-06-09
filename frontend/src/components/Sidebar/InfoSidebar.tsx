@@ -1,4 +1,5 @@
 import type { SelectedFeature } from '../../types'
+import type { DetailSubject } from '../common/DetailModal'
 
 interface InfoSidebarProps {
   feature:           SelectedFeature
@@ -7,10 +8,11 @@ interface InfoSidebarProps {
   onFocusHub:        (name: string | null) => void
   onOpenHubPanel:    (name: string) => void
   onPharmacyChain:   (pharmacyId: number, hubName: string) => void
+  onShowDetail:      (subject: DetailSubject) => void
 }
 
 export function InfoSidebar({
-  feature, onClose, focusedHub, onFocusHub, onOpenHubPanel, onPharmacyChain,
+  feature, onClose, focusedHub, onFocusHub, onOpenHubPanel, onPharmacyChain, onShowDetail,
 }: InfoSidebarProps) {
   const p = feature.properties as Record<string, any>
   const isBackbone = !!p.backbone_tier
@@ -123,11 +125,19 @@ export function InfoSidebar({
               </>
             )}
 
+            <div className="pt-1 border-t border-slate-700/60 mt-1">
+              <button onClick={() => onShowDetail({ kind: 'hub', data: p })}
+                      className="w-full text-xs py-2 rounded-lg font-medium bg-blue-600 hover:bg-blue-500
+                                 text-white transition-colors shadow-sm shadow-blue-900/40">
+                Details anzeigen
+              </button>
+            </div>
+
             {p.hub_type !== 'HQ' && (
-              <div className="space-y-1.5 pt-1 border-t border-slate-700/60 mt-1">
+              <div className="space-y-1.5 pt-1">
                 <button onClick={() => onOpenHubPanel(p.name)}
-                        className="w-full text-xs py-2 rounded-lg font-medium bg-blue-600 hover:bg-blue-500
-                                   text-white transition-colors shadow-sm shadow-blue-900/40">
+                        className="w-full text-xs py-2 rounded-lg font-medium border border-slate-600
+                                   text-slate-300 hover:text-white hover:border-slate-400 transition-colors">
                   Routen-Übersicht öffnen
                 </button>
                 <button onClick={() => onFocusHub(isFocused ? null : p.name)}
@@ -168,6 +178,11 @@ export function InfoSidebar({
               <Row label="Kosten"  value={`CHF ${(p.total_cost_chf as number).toLocaleString('de-CH')}`} hl />
               {p.co2_kg != null && <Row label="CO2" value={`${p.co2_kg} kg`} />}
             </div>
+            <button onClick={() => onShowDetail({ kind: 'vehicle', data: p })}
+                    className="w-full text-xs py-2 mt-1 rounded-lg font-medium bg-blue-600 hover:bg-blue-500
+                               text-white transition-colors shadow-sm shadow-blue-900/40">
+              Details anzeigen
+            </button>
           </div>
         )}
 
@@ -185,6 +200,11 @@ export function InfoSidebar({
               {p.co2_kg != null && <Row label="CO2" value={`${p.co2_kg} kg`} />}
               {(p.restock_count as number) > 0 && <Row label="Restock" value={`${p.restock_count}×`} />}
             </div>
+            <button onClick={() => onShowDetail({ kind: 'vehicle', data: p })}
+                    className="w-full text-xs py-2 mt-1 rounded-lg font-medium bg-blue-600 hover:bg-blue-500
+                               text-white transition-colors shadow-sm shadow-blue-900/40">
+              Details anzeigen
+            </button>
           </div>
         )}
       </div>

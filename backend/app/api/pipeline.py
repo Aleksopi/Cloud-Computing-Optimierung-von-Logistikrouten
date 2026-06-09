@@ -70,7 +70,7 @@ def reset_pipeline():
         db.query(VehicleRoute).delete()
         db.query(Assignment).delete()
         db.query(Hub).delete()
-        db.query(Pharmacy).update({"hub_name": None, "demand": None})
+        db.query(Pharmacy).update({"hub_name": None, "demand": None, "undeliverable_reason": None})
         db.query(PipelineRun).update(
             {"status": "idle", "started_at": None, "finished_at": None, "error_message": None}
         )

@@ -717,37 +717,48 @@ with ThreadPoolExecutor(max_workers=8) as pool:
 
 **Frage:** Welche Fahrzeuge fahren welche Routen, optimiert nach Kosten, Zeit und CO₂?
 
-#### Last-Mile Routing: Greedy Nearest-Neighbour VRP
+#### Last-Mile Routing: Greedy Multi-Objektiv-VRP
 
 VRP = Vehicle Routing Problem. Das klassische VRP ist NP-schwer. Unser Greedy-Ansatz liefert in Sekunden eine gute (nicht optimale) Lösung.
 
 ```
 Für jeden Hub:
-  Für jedes verfügbare Fahrzeug (in Prioritätsreihenfolge):
+  Fahrzeugreihenfolge nach Gewichten (Kosten→günstigstes, Zeit→schnellstes, Umwelt→sauberstes):
+  Für jedes verfügbare Fahrzeug:
     1. Lade Fahrzeug voll (items_loaded = capacity)
     2. Starte am Hub
-    3. Wähle nächsten Stop mit kleinstem Composite-Score:
-       score = w_cost × (km × CHF/km)
-             + w_time × (h × Fahrerlohn)
-             + w_env  × (CO₂_g/km × km / 1000 × CHF/kg_CO₂)
-    4. Prüfe Constraints (Kapazität, Reichweite, Schicht, Öffnungszeiten)
+    3. Sammle alle zulässigen Kandidaten-Stops (Kapazität, Reichweite, Schicht, Öffnungszeiten)
+    4. Wähle den Kandidaten mit kleinstem gewichteten, NORMIERTEN Score:
+       score = w_cost × norm(Δ_Tourlänge)   (zusätzl. Fahrstrecke inkl. Rückweg)
+             + w_env  × norm(d_to)           (unmittelbare Leg-Distanz, Emissionen)
+             + w_time × norm(drive_h)        (verkehrs-/stau-bereinigte Fahrzeit)
     5. Stop hinzufügen, Restkapazität reduzieren
     6. Wenn kein Stop mehr möglich: zum Hub zurückfahren
     7. Nächstes Fahrzeug beginnt
 ```
 
-#### Multi-Objekt-Score: Was bedeuten die Gewichte?
+#### Warum NORMIERTE Multi-Objektiv-Auswahl?
 
-```
-score = 0.40 × Fahrtkosten
-      + 0.35 × Fahrzeitkosten
-      + 0.25 × CO₂-Kosten
+Der frühere Score addierte alle drei Komponenten als CHF-Beträge — alle drei waren
+distanzproportional, sodass die Gewichte **dieselbe** „nächster Stop"-Reihenfolge ergaben und
+faktisch wirkungslos waren (CO₂ war zudem ~30× kleiner als die Kosten). Jetzt minimiert jedes
+Objektiv eine **andere** Größe und die Werte werden über die Kandidatenmenge min-max-normiert:
 
-# Beispiel: Sprinter vs. LKW für eine 50-km-Strecke
-Sprinter:  0.40×19 + 0.35×34 + 0.25×9.25  = 7.60 + 11.90 + 2.31  = 21.81
-Klein-LKW: 0.40×35 + 0.35×36 + 0.25×11.5  = 14.0 + 12.60 + 2.87  = 29.47
-→ Sprinter gewinnt auf dieser Strecke
-```
+- **Kosten** → kompakte Touren (minimiert zusätzliche Gesamtfahrstrecke inkl. Rückweg)
+- **Umwelt** → minimiert die unmittelbar hinzugefügte Fahrstrecke (Emissionen pro Leg)
+- **Zeit** → minimiert die stau-bereinigte Fahrzeit; bei TomTom Live weicht sie von der reinen
+  Distanz ab → **die Gewichte wirken auch mit Live-Verkehr**
+
+So verändern unterschiedliche Gewichtungen (Kostenfokus / Zeitkritisch / Öko) die Route real —
+sicht- und messbar in Routenanzahl, km, Kosten und CO₂.
+
+#### Nicht belieferbare Apotheken & Zwangslieferung
+
+Bleibt eine zugewiesene Apotheke offen (z.B. Bedarf > Fahrzeugkapazität), wird der **Grund** je
+Apotheke gespeichert und in der Analyse (Tab „Belieferung") angezeigt. Die Einstellung
+**„Alle Apotheken beliefern"** (`require_full_delivery`) erzwingt eine garantierte Belieferung
+aller zugewiesenen Apotheken — ein abschließender Zwangslieferungs-Pass ignoriert dafür bewusst
+Schicht- und Öffnungszeit-Grenzen.
 
 #### Backbone Routing
 
@@ -766,23 +777,29 @@ with ThreadPoolExecutor(max_workers=8) as pool:
 
 ## 7. Optimierungsmodell & Algorithmen
 
-### Composite Score — Die zentrale Routing-Entscheidung
+### Gewichtete Stop-Auswahl — Die zentrale Routing-Entscheidung
 
-Jede Routing-Entscheidung basiert auf einem einheitlichen, gewichteten Score:
+Jeder nächste Stop wird über einen gewichteten, **normierten** Multi-Objektiv-Score gewählt.
+Jedes Objektiv minimiert eine andere Größe, damit die Gewichte die Route real verändern:
 
 ```
-score = w_cost × (d_km × CHF/km)
-      + w_time × ((d_km/speed × traffic_factor + service_min/60) × Fahrerlohn)
-      + w_env  × (d_km × CO₂_g/km / 1000 × CO₂_Schattenpreis)
+score = w_cost × norm(Δ_Tourlänge)   ← d(hier→Stop)+d(Stop→Depot)−d(hier→Depot)
+      + w_env  × norm(d_to)           ← unmittelbar hinzugefügte Fahrstrecke
+      + w_time × norm(drive_h)        ← verkehrs-/stau-bereinigte Fahrzeit (TomTom/Sim.)
 ```
+
+`norm(...)` = Min-Max-Normierung über die aktuelle Kandidatenmenge → jedes Gewicht hat balancierte
+Hebelwirkung (auch CO₂, das vorher gegenüber den Kosten verschwindend klein war).
 
 **Konfigurierbare Gewichte** (Standard):
 
-| Gewicht | Wert | Bedeutung |
+| Gewicht | Wert | Minimiert |
 |---|---|---|
-| `w_cost` | 0.40 (40%) | Direkte Fahrtkosten in CHF/km |
-| `w_time` | 0.35 (35%) | Fahrerarbeitszeit × Stundenlohn |
-| `w_env` | 0.25 (25%) | CO₂-Emissionen × Schattenpreis (0.12 CHF/kg) |
+| `w_cost` | 0.40 (40%) | zusätzliche Gesamtfahrstrecke (kompakte Touren) |
+| `w_time` | 0.35 (35%) | stau-bereinigte Fahrzeit (wirkt mit Live-Verkehr) |
+| `w_env` | 0.25 (25%) | unmittelbare Emissions-Fahrstrecke |
+
+Zusätzlich steuern die Gewichte die **Fahrzeugreihenfolge** je Hub (günstig / schnell / sauber zuerst).
 
 ### Constraints — Was das Routing einschränkt
 
@@ -846,21 +863,28 @@ MapLibre GL rendert alle Kartenelemente (Punkte, Linien, Polygone) auf der GPU v
 **1. Karte (Hauptansicht)**
 - Pipeline-Steuerung (Start/Status der 4 Steps)
 - Interaktive Karte mit ein-/ausblendabaren Layern
-- Klick auf Apotheke/Hub → Hervorhebung der Lieferkette
+- Klick auf Apotheke/Hub/Route → Hervorhebung + Info-Panel (oben rechts)
+- Info-Panel → Button **„Details anzeigen"** öffnet das Detail-Fenster (Hub/Fahrzeug,
+  Fahrzeug inkl. „von Stadt → nach Stadt") — identisch zum Detail-Fenster der Analyse
 - Hover → Tooltip mit Detailinfos
 
-**2. Analyse-Dashboard** (nach Step 4)
+**2. Analyse-Dashboard** (nach Step 4, 7 Tabs)
 
 | Tab | Inhalt |
 |---|---|
 | Übersicht | KPI-Karten: Gesamtkosten, km, CO₂, Routen |
-| Fahrzeuge | Auslastungstabelle, aufklappbare Routenlisten |
-| Hubs | Lagerauslastung aller 25 Hubs als Balkendiagramm |
+| Last Mile | Auslastungstabelle, aufklappbare Routenlisten — **Zeile klickbar → Detail-Fenster** |
+| Hauptlauf | Backbone-Flotte HQ→VZ / VZ→mVZ — Zeile klickbar → Detail-Fenster |
+| Hubs | Lagerauslastung aller Hubs — **Hub klickbar → Detail-Fenster** |
+| Belieferung | Abdeckungsgrad + **Liste nicht belieferbarer Apotheken nach Grund** |
+| Verkehr | Verkehrsquelle/-faktor, Mehrzeit je Fahrzeugtyp |
 | CO₂ & Umwelt | Emissionsvergleich Sprinter vs. LKW vs. Zug |
 
 **3. Einstellungen**
 - Fahrzeugflotte vollständig editierbar (CRUD)
-- Optimierungsparameter (Gewichte, Kapazitäten, Radien)
+- Gewichtung (Slider Kosten/Zeit/Umwelt) und Optimierungsparameter (Kapazitäten, Radien)
+- Schalter **„Alle Apotheken beliefern"** (erzwingt garantierte Belieferung)
+- Button **„Auf Standard zurücksetzen"** (Parameter, Gewichtung & Flotte; TomTom-Key bleibt)
 - TomTom API-Key Verwaltung mit Live-Test-Funktion
 - Alle Änderungen werden sofort in PostgreSQL gespeichert
 
