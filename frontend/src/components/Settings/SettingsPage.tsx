@@ -125,7 +125,7 @@ export function SettingsPage() {
 
         {error && (
           <div className="flex items-center gap-2 text-sm text-red-400 bg-red-950/40 border border-red-800/40 rounded-xl px-4 py-3">
-            <span className="text-red-500">⚠</span> {error}
+            <WarnIcon className="w-4 h-4 flex-shrink-0 text-red-500" /> {error}
             <button onClick={() => setError(null)} className="ml-auto text-red-600 hover:text-red-400">✕</button>
           </div>
         )}
@@ -180,14 +180,18 @@ export function SettingsPage() {
         <section className="bg-slate-900/60 border border-slate-700/60 rounded-xl overflow-hidden">
           <div className="px-5 py-4 border-b border-slate-700/60 bg-slate-800/40">
             <h3 className="text-sm font-semibold text-slate-200">Logistik-Parameter</h3>
-            <p className="text-xs text-slate-500 mt-0.5">Hubs, Warenbedarf, Schicht, statischer Verkehrsfaktor und Lagerkosten</p>
+            <p className="text-xs text-slate-500 mt-0.5">
+              Hubs, Warenbedarf, Schicht, statischer Verkehrsfaktor und Lagerkosten ·
+              VZ-Anzahl wird auf 4–6 begrenzt, die mVZ-Anzahl ergibt sich automatisch aus Bedarf
+              und Mindestauslastung.
+            </p>
           </div>
           <div className="px-5 py-5">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-4">
               {[
-                'n_vz', 'n_mvz',
+                'n_vz', 'hub_min_utilization',
                 'vz_capacity', 'mvz_capacity',
-                'hq_direct_radius_km',
+                'hq_storage_factor', 'hq_direct_radius_km',
                 'population_per_item', 'max_catchment_km', 'vz_hard_radius_km',
                 'default_demand_est',
                 'shift_start', 'shift_hours', 'traffic_factor', 'co2_shadow_chf',
@@ -276,6 +280,16 @@ export function SettingsPage() {
 
       </div>
     </div>
+  )
+}
+
+function WarnIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 16 16" fill="none" aria-hidden="true">
+      <path d="M8 2 L15 14 H1 Z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" />
+      <line x1="8" y1="6.5" x2="8" y2="10" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+      <circle cx="8" cy="11.8" r="0.7" fill="currentColor" />
+    </svg>
   )
 }
 
@@ -677,7 +691,7 @@ function TrafficSection() {
         {/* Last Step-4 live-run error (key invalid / limit reached) */}
         {tt?.last_error && (
           <div className="flex items-start gap-2 text-xs text-red-300 bg-red-950/40 border border-red-800/50 rounded-lg px-3 py-2">
-            <span className="flex-shrink-0">⚠</span>
+            <WarnIcon className="w-4 h-4 flex-shrink-0 mt-0.5 text-red-400" />
             <span><strong>Letzter Live-Lauf:</strong> {tt.last_error}</span>
           </div>
         )}

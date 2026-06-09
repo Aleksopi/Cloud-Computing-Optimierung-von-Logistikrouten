@@ -40,7 +40,7 @@ Das System löst ein reales Logistikoptimierungsproblem: Wie versorgt man 400 Sc
 | **Multi-Objekt-Routenoptimierung** | VRP minimiert gleichzeitig Kosten, Fahrzeit und CO₂ |
 | **Vollständig konfigurierbar** | Fahrzeugflotte, Kapazitäten, Öffnungszeiten, Optimierungsgewichte |
 | **Interaktive Karte** | Echtzeit-Visualisierung mit Hervorhebung von Lieferketten |
-| **Analyse-Dashboard** | 4 Analyse-Tabs: Übersicht, Fahrzeuge, Hubs, CO₂ |
+| **Analyse-Dashboard** | 6 Analyse-Tabs: Übersicht, Last Mile, Hauptlauf, Hubs, Verkehr, CO₂ |
 
 ---
 
@@ -229,16 +229,18 @@ Der p-Median-Algorithmus minimiert die gewichtete Summe der Distanzen zwischen A
 
 1. Vollständige Haversine-Distanzmatrix (400 Apotheken + HQ) wird aufgebaut
 2. Nachfragegewichte: `weight[i] = demand[i] / mean(demand)` (normalisiert)
-3. VZs iterativ platziert (greedy, größter gewichteter Erreichbarkeitsgewinn)
+3. VZs iterativ platziert (greedy, größter gewichteter Erreichbarkeitsgewinn). Die VZ-Anzahl ist auf **4–6** begrenzt.
 4. Constraints VZ: ≥40 km Abstand untereinander, ≥25 km vom HQ
-5. mVZs analog mit engeren Abstandsregeln (≥18 km)
-6. Jedem mVZ wird das nächste VZ als `parent_hub` zugewiesen
-7. Kapazitätsbewusste Apothekenzuweisung (haversine, Nearest-Hub-with-Capacity)
-8. HQ-Kapazität = Gesamtnachfrage aller Apotheken (alle Waren laufen durch HQ)
+5. mVZ-Kandidaten analog mit engeren Abstandsregeln (≥18 km). Die mVZ-Anzahl hat **kein festes Maximum** — sie wird aus dem Warenbedarf abgeleitet.
+6. **Mindestauslastung:** Kapazitätsbewusste Apothekenzuweisung (haversine), danach werden Hubs unter 10 % Lagerauslastung entfernt und die Apotheken neu zugewiesen — so lange, bis jeder verbleibende VZ/mVZ ≥ 10 % führt. Bedarf und Auslastung entscheiden damit über die endgültige Anzahl und Lage der Hubs.
+7. Jedem mVZ wird das nächste VZ als `parent_hub` zugewiesen
+8. HQ-Kapazität = **130 %** des Gesamtwarenbedarfs (100 % Bedarf + 30 % Reserve)
 
 **Konfigurierbar:**
-- `n_vz` (Standard: 4) — Anzahl Verteilzentren
-- `n_mvz` (Standard: 20) — Anzahl Mini-Verteilzentren
+- `n_vz` (Standard: 4) — gewünschte Anzahl Verteilzentren, automatisch auf 4–6 begrenzt
+- `n_mvz` (Standard: 20) — mVZ-Startwert (Mindest-Kandidatenzahl); die tatsächliche Anzahl ergibt sich aus Bedarf und Mindestauslastung
+- `hub_min_utilization` (Standard: 0,10) — Mindest-Lagerauslastung je VZ/mVZ
+- `hq_storage_factor` (Standard: 1,30) — HQ-Lager = Faktor × Gesamtwarenbedarf
 - `vz_capacity` (Standard: 600) — Lagerkapazität VZ in Einheiten
 - `mvz_capacity` (Standard: 125) — Lagerkapazität mVZ in Einheiten
 - HQ-Position: Umgebungsvariablen `HQ_LAT`, `HQ_LON`, `HQ_NAME`
@@ -246,7 +248,7 @@ Der p-Median-Algorithmus minimiert die gewichtete Summe der Distanzen zwischen A
 **Öffnungszeiten werden gesetzt:**
 - HQ: 06:00–22:00, VZ: 07:00–20:00, mVZ: 08:00–18:00 (konfigurierbar)
 
-**Ergebnis:** 25 Hubs (1 HQ + 4 VZ + 20 mVZ) mit Koordinaten, Kapazitäten und Öffnungszeiten.
+**Ergebnis:** 1 HQ + 4–6 VZ + eine bedarfsabhängige Anzahl mVZ (jeder Hub ≥ 10 % Lagerauslastung) mit Koordinaten, Kapazitäten und Öffnungszeiten.
 
 ---
 
@@ -416,7 +418,7 @@ score = w_cost × (d_km × CHF/km)
 
 | Layer | Farbe | Verfügbar ab |
 |---|---|---|
-| Apotheken | Blau (Kreisgröße = Bedarf) | Immer |
+| Apotheken | Blau (Kreisgröße = Bedarf); **Rot = nicht belieferbar** (nach Step 4) | Immer |
 | Hubs | Violett (HQ), Dunkelblau (VZ), Bernstein (mVZ) | Nach Step 2 |
 | Einzugsgebiete | Blau (VZ), Bernstein (mVZ) | Nach Step 3 |
 | Lieferkette (Backbone) | Rot/dick (HQ→VZ), Teal/gestrichelt (VZ→mVZ) | Nach Step 4 |
@@ -442,13 +444,15 @@ score = w_cost × (d_km × CHF/km)
 - Klick auf Apotheke → Zuweisungslinie wird **bernsteinfarben** hervorgehoben; Hub-Routen werden in Fahrzeugfarben heller dargestellt
 - Klick auf einzelnes Fahrzeug → Route wird 5 px dick + volle Deckkraft, alles andere gedimmt
 
-### Analyse (4 Tabs)
+### Analyse (6 Tabs)
 
 | Tab | Inhalt |
 |---|---|
-| **Übersicht** | 4 KPI-Karten, Flotteneinsatz mit Auslastungsbalken, Kennzahlen |
-| **Fahrzeuge** | Auslastungstabelle (eingesetzt vs. verfügbar), aufklappbare Routen-Tabelle pro Typ |
-| **Hubs** | Lagerauslastung aller Hubs (Balken + %-Anzeige), Fahrzeugspezifikationen, Lieferkettenhierarchie |
+| **Übersicht** | 4 KPI-Karten, Kostenaufteilung, Flotteneinsatz mit Auslastungsbalken, Kennzahlen (inkl. belieferte / nicht belieferbare Apotheken) |
+| **Last Mile** | Fahrzeug-Auslastungstabelle (eingesetzt vs. verfügbar), aufklappbare Routen-Tabelle pro Typ |
+| **Hauptlauf** | Backbone-KPIs, Flotte nach Fahrzeugtyp (HQ→VZ, VZ→mVZ), Routendetails |
+| **Hubs** | Hub-Verteilung (VZ-/mVZ-Anzahl, Ø- und Min.-Auslastung), Lagerauslastung & -kosten, Fahrzeugspezifikationen, Lieferkettenhierarchie |
+| **Verkehr** | Verkehrsquelle/-faktor, Mehrzeit je Fahrzeugtyp, am stärksten betroffene Routen |
 | **CO2 & Umwelt** | CO2-Balken nach Typ, Detail-Vergleichstabelle, CO2-Einsparung Sprinter vs. LKW |
 
 ### Einstellungen
@@ -485,8 +489,10 @@ Alle Werte sind zur Laufzeit änderbar und werden in der Datenbank gespeichert:
 
 | Schlüssel | Standard | Beschreibung |
 |---|---|---|
-| `n_vz` | 4 | Anzahl Verteilzentren (VZ) |
-| `n_mvz` | 20 | Anzahl Mini-Verteilzentren (mVZ) |
+| `n_vz` | 4 | Anzahl Verteilzentren (VZ) — automatisch auf 4–6 begrenzt |
+| `n_mvz` | 20 | mVZ-Startwert; tatsächliche Anzahl automatisch (kein Maximum) |
+| `hub_min_utilization` | 0,10 | Mindest-Lagerauslastung je VZ/mVZ (sonst entfällt der Hub) |
+| `hq_storage_factor` | 1,30 | HQ-Lager = Faktor × Gesamtwarenbedarf (130 %) |
 | `vz_capacity` | 600 | Max. Einheiten je VZ |
 | `mvz_capacity` | 125 | Max. Einheiten je mVZ |
 | `hq_direct_radius_km` | 20 | HQ-Direktlieferung bis X km Straßendistanz |
@@ -702,19 +708,19 @@ Das Projekt erfüllt die DHBW-Anforderungen aus „Projekt 9: Optimierung von Lo
 
 | Anforderung | Status | Umsetzung |
 |---|---|---|
-| **Routenoptimierung** | ✅ Vollständig | Greedy VRP mit Multi-Objekt-Score (Kosten + Zeit + CO₂) |
-| **Graphenalgorithmen** | ✅ Vollständig | Nachfragegewichteter Greedy p-Median (Hub Placement) |
-| **Faktor: Entfernung** | ✅ Vollständig | Haversine (Placement) + OSRM Straßendistanz (Routing) |
-| **Faktor: Verkehr** | ⚠️ Vorbereitet | `traffic_factor` in DB konfigurierbar; kein Live-Feed aktiv |
-| **Faktor: Transportkapazität** | ✅ Vollständig | Kapazitätsbeschränkungen pro Fahrzeug und pro Hub-Lager |
-| **Kosten-Optimierung** | ✅ Vollständig | CHF/km + Fahrerlohn im Score gewichtet |
-| **Zeit-Optimierung** | ✅ Vollständig | Fahrzeit × Fahrerlohn im Score gewichtet |
-| **Umwelt-Optimierung** | ✅ Vollständig | CO₂-Emissionen über Schattenpreis monetarisiert |
-| **OpenStreetMap-Daten** | ✅ Vollständig | OSRM mit echtem Schweizer Straßennetz |
-| **Interaktive Visualisierung** | ✅ Vollständig | MapLibre GL (statt Folium — weitaus leistungsfähiger) |
-| **Datenbankintegration** | ✅ Vollständig | PostgreSQL + PostGIS (statt Neo4j — besser für relationale Daten) |
-| **Cloud/Container-Betrieb** | ✅ Vollständig | Vollständige Docker-Compose-Orchestrierung |
-| **Live-Verkehrsdaten** | ❌ Nicht umgesetzt | Architektonisch vorbereitet (siehe Roadmap) |
+| **Routenoptimierung** | Vollständig | Greedy VRP mit Multi-Objekt-Score (Kosten + Zeit + CO₂) |
+| **Graphenalgorithmen** | Vollständig | Nachfragegewichteter Greedy p-Median (Hub Placement) |
+| **Faktor: Entfernung** | Vollständig | Haversine (Placement) + OSRM Straßendistanz (Routing) |
+| **Faktor: Verkehr** | Vollständig | Statischer Faktor, Tageszeit-Simulation und TomTom Live Traffic (Step 4) |
+| **Faktor: Transportkapazität** | Vollständig | Kapazitätsbeschränkungen pro Fahrzeug und pro Hub-Lager |
+| **Kosten-Optimierung** | Vollständig | CHF/km + Fahrerlohn im Score gewichtet |
+| **Zeit-Optimierung** | Vollständig | Fahrzeit × Fahrerlohn im Score gewichtet |
+| **Umwelt-Optimierung** | Vollständig | CO₂-Emissionen über Schattenpreis monetarisiert |
+| **OpenStreetMap-Daten** | Vollständig | OSRM mit echtem Schweizer Straßennetz |
+| **Interaktive Visualisierung** | Vollständig | MapLibre GL (statt Folium — weitaus leistungsfähiger) |
+| **Datenbankintegration** | Vollständig | PostgreSQL + PostGIS (statt Neo4j — besser für relationale Daten) |
+| **Cloud/Container-Betrieb** | Vollständig | Vollständige Docker-Compose-Orchestrierung |
+| **Live-Verkehrsdaten** | Vollständig | TomTom Matrix Routing (Echtzeit) mit Fallback auf Tageszeit-Simulation |
 
 ### Eigenleistungen über die Anforderungen hinaus
 

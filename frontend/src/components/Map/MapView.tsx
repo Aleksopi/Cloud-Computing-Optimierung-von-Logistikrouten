@@ -20,6 +20,7 @@ export const COLORS = {
   backbone:        '#94a3b8',
   pharmacy:        '#3b82f6',
   pharmacyNone:    '#64748b',
+  pharmacyUnserved:'#ef4444', // red — pharmacy that cannot be supplied
 } as const
 
 // Stable color per vehicle type (for routes-layer match expression)
@@ -104,6 +105,10 @@ export function MapView({
     map.addControl(new maplibregl.NavigationControl(), 'top-right')
     map.addControl(new maplibregl.ScaleControl({ unit: 'metric' }), 'bottom-right')
 
+    // Keep the canvas in sync with its container (e.g. when the sidebar collapses)
+    const resizeObserver = new ResizeObserver(() => map.resize())
+    resizeObserver.observe(containerRef.current)
+
     const routeColor: any = ROUTE_COLOR_EXPR
 
     map.on('load', () => {
@@ -141,7 +146,11 @@ export function MapView({
         id: 'pharmacies-layer', type: 'circle', source: 'pharmacies',
         layout: { visibility: vis('pharmacies') },
         paint: {
-          'circle-color': ['case', ['has', 'demand'], COLORS.pharmacy, COLORS.pharmacyNone],
+          // Red = assigned but not deliverable (no last-mile route reaches it).
+          'circle-color': ['case',
+            ['==', ['get', 'served'], false], COLORS.pharmacyUnserved,
+            ['has', 'demand'], COLORS.pharmacy,
+            COLORS.pharmacyNone],
           'circle-radius': [
             'interpolate', ['linear'], ['zoom'],
             6,  ['case', ['has', 'demand'], ['interpolate', ['linear'], ['get', 'demand'], 1, 2.5, 5, 4, 15, 6], 2.5],
@@ -212,7 +221,7 @@ export function MapView({
     })
 
     mapRef.current = map
-    return () => { readyRef.current = false; popupRef.current?.remove(); map.remove(); mapRef.current = null }
+    return () => { readyRef.current = false; resizeObserver.disconnect(); popupRef.current?.remove(); map.remove(); mapRef.current = null }
 
     function vis(k: string): 'visible' | 'none' { return visibleRef.current.has(k) ? 'visible' : 'none' }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
@@ -261,8 +270,9 @@ export function MapView({
     // Step 1 = demand → pharmacy circles scale after step 1
     // Step 2 = hub placement → hubs appear after step 2
     // Step 3 = influence zones → assignments appear after step 3
+    // Re-fetch pharmacies when step 3 (hub_name) or step 4 (served flag) change too.
     const purl = st(1) === 'done' ? '/api/results/pharmacies?demand=1' : '/api/results/pharmacies'
-    fetchUrl('pharmacies', purl, `ph:${rk(1)}`)
+    fetchUrl('pharmacies', purl, `ph:${rk(1)}:${rk(3)}:${rk(4)}`)
     if (st(2) === 'done') fetchUrl('hubs', '/api/results/hubs', rk(2))
     if (st(3) === 'done') fetchUrl('assignments', '/api/results/assignments', rk(3))
     if (st(4) === 'done') { fetchUrl('routes', '/api/results/routes', rk(4)); fetchUrl('backbone', '/api/results/backbone', rk(4)) }
@@ -546,6 +556,8 @@ function tooltipHtml(feat: maplibregl.MapGeoJSONFeature): string {
     if (p.city) h += `<div class="t-row">${esc(p.city)}</div>`
     if (p.hub_name) h += `<div class="t-row">Hub: <b>${esc(p.hub_name)}</b></div>`
     h += `<div class="t-row">Bedarf: ${p.demand != null ? p.demand + ' Einheiten' : 'noch nicht berechnet'}</div>`
+    if (p.served === false || p.served === 'false')
+      h += `<div class="t-row" style="color:#f87171;font-weight:600">Nicht belieferbar</div>`
   } else if (lid === 'hubs-layer') {
     const tl = p.hub_type === 'HQ' ? 'Hauptquartier' : p.hub_type === 'VZ' ? 'Verteilzentrum' : 'Mini-VZ'
     h = `<strong>${esc(p.name)}</strong><div class="t-row">${tl}</div>`
@@ -557,7 +569,7 @@ function tooltipHtml(feat: maplibregl.MapGeoJSONFeature): string {
     h += `<div class="t-row">${p.total_km} km · CHF ${p.total_cost_chf}</div>`
     if (p.total_hours != null) {
       const live = p.traffic_source === 'tomtom'
-      h += `<div class="t-row">⏱ ca. ${Number(p.total_hours).toFixed(1)} h${live ? ' · LIVE' : ''}</div>`
+      h += `<div class="t-row">Fahrzeit ca. ${Number(p.total_hours).toFixed(1)} h${live ? ' · LIVE' : ''}</div>`
     }
   } else if (lid === 'backbone-hq-vz-layer' || lid === 'backbone-vz-mvz-layer') {
     const t = lid.includes('hq') ? 'HQ → VZ' : 'VZ → mVZ'
