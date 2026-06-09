@@ -237,7 +237,30 @@ export interface TrafficSummary {
   by_type: Record<string, TrafficByType>
 }
 
+/** Last-mile optimisation value vs. the naive individual-delivery baseline. */
+export interface Savings {
+  baseline_vehicle:   string
+  pharmacies:         number
+  baseline_km:        number
+  baseline_cost_chf:  number
+  baseline_hours:     number
+  baseline_co2_kg:    number
+  optimized_km:       number
+  optimized_cost_chf: number
+  optimized_hours:    number
+  optimized_co2_kg:   number
+  saved_km:           number
+  saved_cost_chf:     number
+  saved_hours:        number
+  saved_co2_kg:       number
+  saved_km_pct:       number
+  saved_cost_pct:     number
+  saved_hours_pct:    number
+  saved_co2_pct:      number
+}
+
 export interface FullSummary {
+  savings: Savings | null
   overview: {
     total_cost_chf: number
     warehouse_cost_chf: number

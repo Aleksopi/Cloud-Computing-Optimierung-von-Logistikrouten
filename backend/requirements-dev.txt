@@ -1,0 +1,5 @@
+# Test/development dependencies (not needed at runtime).
+#   pip install -r requirements.txt -r requirements-dev.txt
+#   pytest        # from the backend/ directory
+-r requirements.txt
+pytest==7.4.4

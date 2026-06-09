@@ -177,6 +177,25 @@ Step 4: Routenoptimierung  → ~1–2 Minuten
 docker-compose down -v && docker-compose up --build
 ```
 
+### Tests ausführen (Optimierungs-Kernlogik)
+
+Die fachliche Kernlogik (Generalized-Cost-Score, Constraints, Verkehrsmodell, Einsparungsnachweis) ist
+durch eine **pytest-Suite** abgesichert. Sie läuft vollständig **offline** — ohne OSRM, Datenbank oder
+Netzwerk (die OSRM-Matrix wird im Test deterministisch ersetzt):
+
+```bash
+# im laufenden Backend-Container
+docker-compose exec backend sh -c "pip install -r requirements-dev.txt && pytest -q"
+
+# oder lokal
+cd backend && pip install -r requirements-dev.txt && pytest -q
+```
+
+Geprüft werden u. a.: dass jedes Gewicht (Kosten/Zeit/Umwelt) das jeweils richtige Objektiv minimiert,
+dass Zeit-Minimierung dank echter Straßenfahrzeiten eine **andere** Route als Distanz-Minimierung
+ergibt, dass Kapazitäts-/Reichweiten-/Öffnungszeit-Constraints greifen und dass die Einsparung gegen
+die Einzelfahrten-Baseline korrekt berechnet wird.
+
 ---
 
 ## 5. Pipeline — Die 4 Berechnungsschritte
@@ -283,12 +302,15 @@ Das HQ kann Apotheken im konfigurierten Radius (`hq_direct_radius_km`, Standard:
 
 **Last-Mile-Routing (Hub → Apotheken):**
 
-Algorithmus: **Greedy Multi-Objektiv-VRP** mit gewichteter, normierter Stop-Auswahl, parallelisiert über 8 Threads.
+Algorithmus: **Greedy Multi-Objektiv-VRP** mit gewichteter, normierter Stop-Auswahl auf Basis
+**verallgemeinerter Kosten** (generalized cost), parallelisiert über 8 Threads. Distanzen *und*
+Fahrzeiten stammen aus echten OSRM-Straßendaten (ein `/table`-Aufruf je Depot, `distance,duration`).
 
 Die **Optimierungsgewichte** (Kosten/Zeit/Umwelt) bestimmen zuerst die **Fahrzeugreihenfolge**
 (Kosten → günstigstes, Zeit → schnellstes, Umwelt → emissionsärmstes Fahrzeug zuerst) und steuern
-dann pro Hub und Fahrzeug die **Stop-Auswahl** (siehe Abschnitt 7 — die drei Gewichte minimieren
-jeweils eine *andere* Größe, sodass sie die Route real verändern, auch mit Live-Verkehr):
+dann pro Hub und Fahrzeug die **Stop-Auswahl**: Es wird der Stop mit den geringsten gewichteten
+**Grenzkosten** (zusätzliche CHF / Stunden / kg CO₂, siehe Abschnitt 7) gewählt. Weil die Zeit aus
+echten Straßenfahrzeiten kommt, verändern die Gewichte die Route real — auch ohne Live-Verkehr:
 1. Sammle alle zulässigen Kandidaten-Stops; Constraints pro Stop:
    - `demand ≤ items_loaded` (Fahrzeugkapazität)
    - `km_used + d_to + d_back ≤ range_km` (Reichweite)
@@ -368,38 +390,68 @@ HQ (Bern)
 
 ## 7. Optimierungsmodell
 
-### Gewichtete Stop-Auswahl (Routing-Entscheidung)
+### Verallgemeinerte Kosten (generalized cost) — die Routing-Entscheidung
 
-Jeder nächste Stop wird über einen **gewichteten, normierten Multi-Objektiv-Score** gewählt —
-kleinerer Wert ist besser. Damit die Gewichte die Route **tatsächlich** verändern (und nicht alle
-auf „nächster Stop" zusammenfallen), minimiert jedes der drei Objektive eine **andere** Größe:
+Jeder nächste Stop wird über einen **gewichteten, normierten Multi-Objektiv-Score** gewählt
+(kleinerer Wert ist besser). Anders als ein reines „nächster-Stop"-Greedy minimiert jedes der drei
+Objektive die **echte Grenzgröße** (Insertions-Delta) des Stops in seiner **natürlichen Einheit** —
+CHF, Stunden, kg CO₂:
 
 ```
-score = w_cost × norm(Δ_Tourlänge)   ← Kosten: zusätzl. Fahrstrecke inkl. Rückweg (kompakte Touren)
-      + w_env  × norm(d_to)           ← Umwelt: unmittelbar hinzugefügte Fahrstrecke (Emissionen/Leg)
-      + w_time × norm(drive_h)        ← Zeit:   verkehrs-/stau-bereinigte Fahrzeit des nächsten Legs
+Δkm = d(hier→Stop) + d(Stop→Depot) − d(hier→Depot)     ← zusätzliche Fahrstrecke (inkl. Rückweg)
+Δh  = t(hier→Stop) + t(Stop→Depot) − t(hier→Depot)     ← zusätzliche Fahrzeit (Straßenzeit, verkehrsbereinigt)
+
+Kosten  = Δkm × CHF/km  +  Δh × Fahrerlohn   (CHF — Betriebskosten + Lohnkosten)
+Zeit    = Δh                                 (Stunden — echte Fahrzeit)
+Umwelt  = Δkm × g CO₂/km / 1000              (kg CO₂ — Emissionen der Zusatzstrecke)
+
+score = w_cost × norm(Kosten) + w_time × norm(Zeit) + w_env × norm(Umwelt)
 ```
 
-- `Δ_Tourlänge = d(hier→Stop) + d(Stop→Depot) − d(hier→Depot)` (Insertion-Kosten)
-- `norm(...)` = Min-Max-Normierung über die aktuelle Kandidatenmenge → jedes Gewicht hat balancierte Hebelwirkung
-- `drive_h` stammt bei **Live-Verkehr** aus der TomTom-Matrix bzw. dem Tageszeit-Modell und weicht
-  dann von der reinen Distanz ab — deshalb wirken die Gewichte **auch mit Live-Traffic**.
+- `norm(...)` = Min-Max-Normierung über die aktuelle Kandidatenmenge → jedes Gewicht hat trotz
+  unterschiedlicher Einheiten (CHF / h / kg) balancierte Hebelwirkung.
+- Die **Kosten** sind eine *Mischung* aus Distanz und Zeit, **Umwelt** ist reine Distanz, **Zeit** ist
+  reine (Straßen-)Zeit. Die drei Gewichte spannen damit eine echte Zielkonflikt-Ebene auf, statt auf
+  dieselbe Größe zu kollabieren.
 
-Zusätzlich steuern die Gewichte die **Fahrzeugreihenfolge** je Hub: Kostenfokus setzt das günstigste,
+**Warum Zeit ≠ Distanz (zentral für die Verkehrsberücksichtigung):**
+`Δh` basiert auf **echten OSRM-Straßenfahrzeiten** (Dauer-Matrix aus demselben `/table`-Aufruf wie die
+Distanzen). Ein 10-km-Stadtleg dauert dort länger als ein 10-km-Autobahnleg — `Δh` ist also **nicht**
+proportional zu `Δkm`. Dadurch erzeugt **Zeit-Minimierung nachweislich eine andere (schnellere) Route
+als Distanz-Minimierung**, und zwar **auch ohne Live-Verkehr**. Mit aktivem Verkehrsmodell/TomTom
+kommen zusätzlich verkehrsbereinigte bzw. echte Echtzeit-Zeiten hinzu.
+
+Zusätzlich steuern die Gewichte die **Fahrzeugreihenfolge** je Hub
+(`w_cost·norm(CHF/km) + w_time·norm(1/Tempo) + w_env·norm(g CO₂/km)`): Kostenfokus setzt das günstigste,
 Zeitfokus das schnellste, Ökofokus das emissionsärmste Fahrzeug zuerst ein.
 
 **Standard-Gewichtung:**
-- `w_cost = 0,40` (40 % Fahrtkosten/-strecke)
-- `w_time = 0,35` (35 % Fahrzeit inkl. Verkehr)
-- `w_env  = 0,25` (25 % Emissions-Fahrstrecke)
+- `w_cost = 0,40` (40 % echte Fahrtkosten in CHF)
+- `w_time = 0,35` (35 % echte Fahrzeit in h)
+- `w_env  = 0,25` (25 % echte Emissionen in kg CO₂)
 
-> Hinweis: Mit der Standardflotte ist das günstigste Fahrzeug (Sprinter) zugleich das
-> emissionsärmste — Kosten- und Ökofokus erzeugen daher *ähnliche*, aber nicht identische Touren
-> (Δ_Tourlänge vs. d_to). Zeitfokus weicht am stärksten ab.
+> Hinweis: Da Umwelt-Kosten (∝ Distanz) und der Distanzanteil der Kosten korreliert sind, liegen
+> Kosten- und Ökofokus tendenziell näher beieinander; der Zeitfokus weicht am stärksten ab, weil
+> Straßenzeit nicht proportional zur Distanz ist. Das ist fachlich korrekt: bei einem einzelnen
+> Fahrzeug ohne Zeit-/Verkehrsunterschiede *sind* die kostengünstigste und die emissionsärmste Route
+> identisch — der echte Zielkonflikt entsteht über die Straßenzeit, die Fahrzeugwahl und den Verkehr.
 
 **Traffic Factor:**
-`traffic_factor` skaliert die Fahrzeiten, wenn kein Live-Verkehr aktiv ist (1,0 = Freifluss). Bei
-aktivem Verkehrsmodell/TomTom liefert die Zeitkomponente echte stau-bereinigte Fahrzeiten.
+`traffic_factor` skaliert die Straßen-Fahrzeiten, wenn kein Live-Verkehr aktiv ist (1,0 = Freifluss).
+Bei aktivem Tageszeit-Modell wird der schichtgemittelte Stau-Faktor, bei TomTom die echte
+Echtzeit-Matrix verwendet.
+
+### Nachweis des Optimierungsnutzens (Baseline-Vergleich)
+
+Step 4 berechnet zusätzlich eine **naive Vergleichs-Baseline**: jede Apotheke wird per **Einzelfahrt**
+(eine eigene Hin-/Rückfahrt ab ihrem Hub, ohne Konsolidierung) beliefert — der klassische Referenzfall
+„ohne Routenoptimierung". Für jede tatsächlich belieferte Apotheke fährt die Baseline `2 × Hub→Apotheke`
+(Straßendistanz/-zeit aus Step 3), Kosten/CO₂ mit dem **günstigsten** Lieferfahrzeug (konservativ).
+
+Die **Einsparung** der Mehrstopp-Optimierung gegenüber dieser Baseline wird in km, CHF, Stunden und kg
+CO₂ (absolut und in %) berechnet und im Analyse-Dashboard (Tab „Übersicht" → Karte
+*Optimierungsgewinn — Last Mile*) prominent angezeigt. So ist der von der Aufgabenstellung geforderte
+Nachweis „erhebliche Einsparungen sowie Umweltvorteile" direkt belegt.
 
 ### Constraints
 
@@ -476,7 +528,7 @@ aktivem Verkehrsmodell/TomTom liefert die Zeitkomponente echte stau-bereinigte F
 
 | Tab | Inhalt |
 |---|---|
-| **Übersicht** | 4 KPI-Karten, Kostenaufteilung, Flotteneinsatz mit Auslastungsbalken, Kennzahlen (inkl. belieferte / nicht belieferbare Apotheken) |
+| **Übersicht** | 4 KPI-Karten, **Optimierungsgewinn-Karte** (−% km/CHF/h/CO₂ vs. Einzelfahrten), Kostenaufteilung, Flotteneinsatz mit Auslastungsbalken, Kennzahlen (inkl. belieferte / nicht belieferbare Apotheken) |
 | **Last Mile** | Fahrzeug-Auslastungstabelle (eingesetzt vs. verfügbar), aufklappbare Routen-Tabelle pro Typ — **Zeile anklickbar → Detail-Fenster** (inkl. „von Stadt → nach Stadt") |
 | **Hauptlauf** | Backbone-KPIs, Flotte nach Fahrzeugtyp (HQ→VZ, VZ→mVZ), Routendetails (Zeile anklickbar → Detail-Fenster) |
 | **Hubs** | Hub-Verteilung, Lagerauslastung & -kosten (**Hub-Zeile anklickbar → Detail-Fenster**), Fahrzeugspezifikationen, Lieferkettenhierarchie |
@@ -574,7 +626,7 @@ Interaktive Dokumentation: `http://localhost:8000/docs`
 | `/api/results/routes` | Last-Mile-Fahrzeugrouten | Nach Step 4 |
 | `/api/results/backbone` | Backbone-Lieferkette (HQ→VZ, VZ→mVZ) mit `backbone_tier` | Nach Step 4 |
 | `/api/results/summary` | Kurzübersicht (Hubs, Routen, Kosten, km) | Nach Step 4 |
-| `/api/results/summary/full` | Vollständige Analyse (Metriken, Flotten-Util., Hierarchie) | Nach Step 4 |
+| `/api/results/summary/full` | Vollständige Analyse (Metriken, Flotten-Util., Hierarchie, **Einsparung vs. Baseline**) | Nach Step 4 |
 
 ### Einstellungen
 
@@ -751,22 +803,30 @@ Das Projekt erfüllt die DHBW-Anforderungen aus „Projekt 9: Optimierung von Lo
 
 | Anforderung | Status | Umsetzung |
 |---|---|---|
-| **Routenoptimierung** | Vollständig | Greedy VRP mit Multi-Objekt-Score (Kosten + Zeit + CO₂) |
-| **Graphenalgorithmen** | Vollständig | Nachfragegewichteter Greedy p-Median (Hub Placement) |
-| **Faktor: Entfernung** | Vollständig | Haversine (Placement) + OSRM Straßendistanz (Routing) |
-| **Faktor: Verkehr** | Vollständig | Statischer Faktor, Tageszeit-Simulation und TomTom Live Traffic (Step 4) |
-| **Faktor: Transportkapazität** | Vollständig | Kapazitätsbeschränkungen pro Fahrzeug und pro Hub-Lager |
-| **Kosten-Optimierung** | Vollständig | CHF/km + Fahrerlohn im Score gewichtet |
-| **Zeit-Optimierung** | Vollständig | Fahrzeit × Fahrerlohn im Score gewichtet |
-| **Umwelt-Optimierung** | Vollständig | CO₂-Emissionen über Schattenpreis monetarisiert |
-| **OpenStreetMap-Daten** | Vollständig | OSRM mit echtem Schweizer Straßennetz |
+| **Routenoptimierung** | Vollständig | Greedy Multi-Objektiv-VRP auf Basis **verallgemeinerter Kosten** (echte CHF + h + kg CO₂) |
+| **Graphenalgorithmen** | Vollständig | Nachfragegewichteter Greedy p-Median (Hub Placement) + VRP auf dem OSRM-Straßengraphen |
+| **Faktor: Entfernung** | Vollständig | OSRM-Straßendistanz (Routing) + Haversine (Placement) |
+| **Faktor: Verkehr** | Vollständig | **Echte OSRM-Straßenfahrzeiten** (Zeit ≠ Distanz) + Tageszeit-Simulation + TomTom Live (Step 4) |
+| **Faktor: Transportkapazität** | Vollständig | Fahrzeug-Ladekapazität + Hub-Lagerkapazität als harte Constraints |
+| **Kosten-Optimierung** | Vollständig | Echte Grenzkosten `Δkm × CHF/km + Δh × Fahrerlohn` im Score |
+| **Zeit-Optimierung** | Vollständig | Echte Grenzfahrzeit (OSRM-Straßenzeit, verkehrsbereinigt) im Score |
+| **Umwelt-Optimierung** | Vollständig | Echte Grenzemissionen `Δkm × g CO₂/km`; Schattenpreis zur Monetarisierung |
+| **Nachweis der Einsparung** | Vollständig | Baseline-Vergleich (Einzelfahrten ohne Optimierung): −% km / CHF / h / CO₂ im Dashboard |
+| **OpenStreetMap-Daten** | Vollständig | OSRM mit echtem Schweizer Straßennetz (Distanz + Fahrzeit) |
 | **Interaktive Visualisierung** | Vollständig | MapLibre GL (statt Folium — weitaus leistungsfähiger) |
 | **Datenbankintegration** | Vollständig | PostgreSQL + PostGIS (statt Neo4j — besser für relationale Daten) |
 | **Cloud/Container-Betrieb** | Vollständig | Vollständige Docker-Compose-Orchestrierung |
 | **Live-Verkehrsdaten** | Vollständig | TomTom Matrix Routing (Echtzeit) mit Fallback auf Tageszeit-Simulation |
+| **Tests / Validierung** | Vollständig | pytest-Suite für Score, Constraints, Verkehrsmodell und Einsparungsnachweis |
 
 ### Eigenleistungen über die Anforderungen hinaus
 
+- **Verallgemeinerte Kosten (generalized cost):** der Routing-Score minimiert die echten Grenzkosten in
+  CHF, Stunden und kg CO₂ — kein geometrischer Proxy, sondern fachlich saubere Multi-Objektiv-Optimierung
+- **Echte OSRM-Straßenfahrzeiten** als Zeitbasis (Dauer-Matrix), sodass das Zeit-Ziel nachweislich von
+  Distanz/CO₂ abweicht — die Verkehrsberücksichtigung wirkt **auch ohne Live-Daten**
+- **Baseline-Einsparungsnachweis:** quantifizierter Vergleich Mehrstopp-Optimierung vs. Einzelfahrten
+- **pytest-Testsuite** (19 Tests, offline lauffähig) für die Optimierungs-Kernlogik
 - **Mehrstufige Lieferkette** (HQ → VZ → mVZ → Apotheke) mit echten Backbone-Routen
 - **HQ-Direktlieferung** für nahegelegene Apotheken
 - **Nachfragegewichtetes Hub Placement** (Demand-Gewichte im p-Median)
@@ -774,7 +834,6 @@ Das Projekt erfüllt die DHBW-Anforderungen aus „Projekt 9: Optimierung von Lo
 - **Vollständige Web-App** mit interaktiver Karte, Hervorhebung von Lieferketten, Analyse-Dashboard
 - **Konfigurierbare Fahrzeugflotte** mit CRUD-Interface
 - **Öffnungszeiten-Constraint** im Routing-Algorithmus
-- **CO₂-Tracking** pro Fahrzeug und Auswertung in der Analyse
 
 ---
 

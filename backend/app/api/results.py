@@ -6,6 +6,7 @@ from sqlalchemy import or_
 
 from app.db.models import Assignment, Hub, Pharmacy, SystemConfig, VehicleFleetConfig, VehicleRoute
 from app.db.session import SessionLocal
+from app.services.metrics import compute_baseline_savings
 from app.services.traffic import resolve as traffic_resolve
 
 router = APIRouter()
@@ -605,7 +606,22 @@ def get_full_summary():
             for p in pharmacies if p.id not in delivered_ids
         ], key=lambda x: (x["reason"], x["city"], x["name"]))
 
+        # ── Optimisation value vs. naive individual-delivery baseline ─────────
+        # Uses the Step-3 hub→pharmacy road distances/times; the cheapest delivery
+        # vehicle defines the (conservative) baseline rate.
+        assignments = db.query(Assignment).all()
+        dist_by_pid = {a.pharmacy_id: (a.distance_km or 0.0) for a in assignments}
+        time_by_pid = {a.pharmacy_id: (a.travel_time_h or 0.0) for a in assignments}
+        lm_vehicles = [v for v in vehicles if v.can_last_mile and v.enabled]
+        cheapest_lm = min(lm_vehicles, key=lambda v: (v.cost_per_km or 0.0), default=None)
+        baseline_vehicle = ({
+            "name": cheapest_lm.name, "cost_per_km": cheapest_lm.cost_per_km,
+            "co2_g_per_km": cheapest_lm.co2_g_per_km, "driver_chf_h": cheapest_lm.driver_chf_h,
+        } if cheapest_lm else None)
+        savings = compute_baseline_savings(last_mile, dist_by_pid, time_by_pid, baseline_vehicle)
+
         return {
+            "savings": savings,
             "overview": {
                 "total_cost_chf":          route_cost_total,
                 "warehouse_cost_chf":      warehouse_total,
