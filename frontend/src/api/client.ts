@@ -51,6 +51,8 @@ export const api = {
   getSystemConfig:    () => json<SystemConfigEntry[]>('/api/settings/system'),
   updateSystemConfig: (updates: Record<string, string>) =>
     json<SystemConfigEntry[]>('/api/settings/system', jsonPut({ updates })),
+  resetSettings:      () => json<{ vehicles: VehicleConfig[]; system: SystemConfigEntry[] }>(
+    '/api/settings/reset', { method: 'POST' }),
 
   // Settings — live traffic
   getTraffic: () => json<TrafficInfo>('/api/settings/traffic'),

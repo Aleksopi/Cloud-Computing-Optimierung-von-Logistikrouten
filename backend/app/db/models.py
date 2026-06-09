@@ -18,6 +18,8 @@ class Pharmacy(Base):
     hub_name = Column(String, nullable=True)
     open_hour  = Column(Float, nullable=True)   # e.g. 8.0 = 08:00
     close_hour = Column(Float, nullable=True)   # e.g. 18.5 = 18:30
+    # Why a hub-assigned pharmacy could not be routed in Step 4 (None = delivered).
+    undeliverable_reason = Column(String, nullable=True)
 
 
 class Hub(Base):
@@ -67,6 +69,9 @@ class VehicleRoute(Base):
     traffic_factor = Column(Float, nullable=True)   # realised drive-time multiplier vs free flow
     traffic_source = Column(String, nullable=True)  # "tomtom" | "simulation" | "static"
     free_flow_hours = Column(Float, nullable=True)  # drive hours without any congestion
+    # Set when this route was added by the forced "alle beliefern" pass (Step 4),
+    # which ignores shift/opening-hours limits to guarantee delivery.
+    forced = Column(Boolean, default=False)
 
 
 class PipelineRun(Base):

@@ -283,21 +283,27 @@ Das HQ kann Apotheken im konfigurierten Radius (`hq_direct_radius_km`, Standard:
 
 **Last-Mile-Routing (Hub → Apotheken):**
 
-Algorithmus: **Greedy Nearest-Neighbour VRP** mit Multi-Objekt-Scoring, parallelisiert über 8 Threads.
+Algorithmus: **Greedy Multi-Objektiv-VRP** mit gewichteter, normierter Stop-Auswahl, parallelisiert über 8 Threads.
 
-Für jeden Hub und jedes Fahrzeug (in sort_order Reihenfolge):
-1. Wähle nächsten Stop anhand des **Composite Score** (kleinster Wert gewinnt):
-   ```
-   score = w_cost × (km × CHF/km)
-         + w_time × (h × Fahrerlohn)
-         + w_env  × (CO₂_g/1000 × CHF/kg_CO₂)
-   ```
-2. Constraints pro Stop:
+Die **Optimierungsgewichte** (Kosten/Zeit/Umwelt) bestimmen zuerst die **Fahrzeugreihenfolge**
+(Kosten → günstigstes, Zeit → schnellstes, Umwelt → emissionsärmstes Fahrzeug zuerst) und steuern
+dann pro Hub und Fahrzeug die **Stop-Auswahl** (siehe Abschnitt 7 — die drei Gewichte minimieren
+jeweils eine *andere* Größe, sodass sie die Route real verändern, auch mit Live-Verkehr):
+1. Sammle alle zulässigen Kandidaten-Stops; Constraints pro Stop:
    - `demand ≤ items_loaded` (Fahrzeugkapazität)
    - `km_used + d_to + d_back ≤ range_km` (Reichweite)
    - `hours_used + drive_h + service_min/60 ≤ shift_hours` (Schichtende)
    - Öffnungszeiten: Ankunft muss innerhalb der Apotheken-Öffnungszeiten liegen
-3. Wenn kein Stop möglich: Fahrzeug endet, nächstes Fahrzeug beginnt
+2. Wähle den Kandidaten mit dem kleinsten gewichteten, normierten Score (siehe Abschnitt 7).
+3. Wenn kein Stop möglich: Fahrzeug endet, nächstes Fahrzeug beginnt.
+
+**Nicht belieferbare Apotheken:** Bleibt eine zugewiesene Apotheke nach allen Fahrzeugen offen
+(Bedarf > Fahrzeugkapazität, Entfernung > Reichweite, außerhalb Öffnungszeit/Schicht, oder Hub
+erschöpft), wird der **Grund** je Apotheke gespeichert und in der Analyse (Tab „Belieferung")
+angezeigt. Mit der Einstellung **„Alle Apotheken beliefern"** (`require_full_delivery`) erzwingt
+ein abschließender Zwangslieferungs-Pass die Belieferung *aller* zugewiesenen Apotheken mit dem
+kapazitätsstärksten Last-Mile-Fahrzeug — dabei werden Schicht- und Öffnungszeit-Grenzen bewusst
+ignoriert, damit niemand offen bleibt.
 
 **Backbone-Routing (HQ → VZ → mVZ):**
 
@@ -362,23 +368,38 @@ HQ (Bern)
 
 ## 7. Optimierungsmodell
 
-### Composite Score (Routing-Entscheidung)
+### Gewichtete Stop-Auswahl (Routing-Entscheidung)
 
-Jede Routing-Entscheidung basiert auf einem einheitlichen Score — kleinerer Wert ist besser:
+Jeder nächste Stop wird über einen **gewichteten, normierten Multi-Objektiv-Score** gewählt —
+kleinerer Wert ist besser. Damit die Gewichte die Route **tatsächlich** verändern (und nicht alle
+auf „nächster Stop" zusammenfallen), minimiert jedes der drei Objektive eine **andere** Größe:
 
 ```
-score = w_cost × (d_km × CHF/km)
-      + w_time × ((d_km/speed × traffic_factor + service_min/60) × Fahrerlohn)
-      + w_env  × (d_km × CO₂_g/km / 1000 × CO₂_Schattenpreis)
+score = w_cost × norm(Δ_Tourlänge)   ← Kosten: zusätzl. Fahrstrecke inkl. Rückweg (kompakte Touren)
+      + w_env  × norm(d_to)           ← Umwelt: unmittelbar hinzugefügte Fahrstrecke (Emissionen/Leg)
+      + w_time × norm(drive_h)        ← Zeit:   verkehrs-/stau-bereinigte Fahrzeit des nächsten Legs
 ```
+
+- `Δ_Tourlänge = d(hier→Stop) + d(Stop→Depot) − d(hier→Depot)` (Insertion-Kosten)
+- `norm(...)` = Min-Max-Normierung über die aktuelle Kandidatenmenge → jedes Gewicht hat balancierte Hebelwirkung
+- `drive_h` stammt bei **Live-Verkehr** aus der TomTom-Matrix bzw. dem Tageszeit-Modell und weicht
+  dann von der reinen Distanz ab — deshalb wirken die Gewichte **auch mit Live-Traffic**.
+
+Zusätzlich steuern die Gewichte die **Fahrzeugreihenfolge** je Hub: Kostenfokus setzt das günstigste,
+Zeitfokus das schnellste, Ökofokus das emissionsärmste Fahrzeug zuerst ein.
 
 **Standard-Gewichtung:**
-- `w_cost = 0,40` (40 % Fahrtkosten)
-- `w_time = 0,35` (35 % Fahrzeit inkl. Fahrerkosten)
-- `w_env  = 0,25` (25 % CO₂-Emissionen monetarisiert)
+- `w_cost = 0,40` (40 % Fahrtkosten/-strecke)
+- `w_time = 0,35` (35 % Fahrzeit inkl. Verkehr)
+- `w_env  = 0,25` (25 % Emissions-Fahrstrecke)
+
+> Hinweis: Mit der Standardflotte ist das günstigste Fahrzeug (Sprinter) zugleich das
+> emissionsärmste — Kosten- und Ökofokus erzeugen daher *ähnliche*, aber nicht identische Touren
+> (Δ_Tourlänge vs. d_to). Zeitfokus weicht am stärksten ab.
 
 **Traffic Factor:**
-`traffic_factor = 1,0` skaliert alle Fahrtzeiten. Hook für zukünftige Live-Verkehrsdaten — bei 1,5 dauert jede Fahrt 50 % länger.
+`traffic_factor` skaliert die Fahrzeiten, wenn kein Live-Verkehr aktiv ist (1,0 = Freifluss). Bei
+aktivem Verkehrsmodell/TomTom liefert die Zeitkomponente echte stau-bereinigte Fahrzeiten.
 
 ### Constraints
 
@@ -388,6 +409,11 @@ score = w_cost × (d_km × CHF/km)
 | Reichweite | `km_used + d_hin + d_zurück ≤ range_km` |
 | Schicht | `hours_used + Fahrzeit + Service ≤ shift_hours` |
 | Öffnungszeiten | `open_hour ≤ Ankunftszeit ≤ close_hour − service_min/60` |
+
+> **Ausnahme „Alle Apotheken beliefern":** Ist `require_full_delivery` aktiv, werden nach dem
+> regulären Routing alle übrig gebliebenen Apotheken per Zwangslieferung beliefert. Dieser Pass
+> ignoriert die Schicht- und Öffnungszeit-Grenzen (Reichweite/Kapazität werden über Mehrfachtouren
+> abgebildet), sodass garantiert jede zugewiesene Apotheke versorgt wird.
 
 ### Öffnungszeiten
 
@@ -409,8 +435,8 @@ score = w_cost × (d_km × CHF/km)
 | Tab | Funktion |
 |---|---|
 | Karte | Interaktive Karte mit Pipeline-Steuerung |
-| Analyse | 4-Tab-Dashboard nach Step 4 |
-| Einstellungen | Fahrzeugflotte und Systemparameter |
+| Analyse | 7-Tab-Dashboard nach Step 4 |
+| Einstellungen | Fahrzeugflotte, Gewichtung und Systemparameter |
 
 ### Karte
 
@@ -432,7 +458,9 @@ score = w_cost × (d_km × CHF/km)
 | Hover über Hub | Tooltip: Typ, Lagerauslastung, Lieferfenster |
 | Hover über Route | Tooltip: Fahrzeug, Stops, km, CHF |
 | Klick auf Apotheke | Info-Panel + Button „Lieferkette dieser Apotheke anzeigen" |
-| Klick auf Hub | Info-Panel + sofortige Routenfilterung auf diesen Hub |
+| Klick auf Hub | Info-Panel (oben rechts) + sofortige Routenfilterung auf diesen Hub |
+| Klick auf Route | Info-Panel (oben rechts) mit Routendaten |
+| Info-Panel → „Details anzeigen" | Öffnet das **Detail-Fenster** (Hub bzw. Fahrzeug, identisch zur Analyse — Fahrzeug inkl. „von Stadt → nach Stadt") |
 | Klick auf Hub → „Routen-Übersicht" | Modal mit allen Fahrzeugen des Hubs |
 | Klick auf Fahrzeug im Modal | Nur diese Route auf der Karte, Modal schließt |
 | Banner-Button „Übersicht" | Modal wieder öffnen |
@@ -444,26 +472,37 @@ score = w_cost × (d_km × CHF/km)
 - Klick auf Apotheke → Zuweisungslinie wird **bernsteinfarben** hervorgehoben; Hub-Routen werden in Fahrzeugfarben heller dargestellt
 - Klick auf einzelnes Fahrzeug → Route wird 5 px dick + volle Deckkraft, alles andere gedimmt
 
-### Analyse (6 Tabs)
+### Analyse (7 Tabs)
 
 | Tab | Inhalt |
 |---|---|
 | **Übersicht** | 4 KPI-Karten, Kostenaufteilung, Flotteneinsatz mit Auslastungsbalken, Kennzahlen (inkl. belieferte / nicht belieferbare Apotheken) |
-| **Last Mile** | Fahrzeug-Auslastungstabelle (eingesetzt vs. verfügbar), aufklappbare Routen-Tabelle pro Typ |
-| **Hauptlauf** | Backbone-KPIs, Flotte nach Fahrzeugtyp (HQ→VZ, VZ→mVZ), Routendetails |
-| **Hubs** | Hub-Verteilung (VZ-/mVZ-Anzahl, Ø- und Min.-Auslastung), Lagerauslastung & -kosten, Fahrzeugspezifikationen, Lieferkettenhierarchie |
+| **Last Mile** | Fahrzeug-Auslastungstabelle (eingesetzt vs. verfügbar), aufklappbare Routen-Tabelle pro Typ — **Zeile anklickbar → Detail-Fenster** (inkl. „von Stadt → nach Stadt") |
+| **Hauptlauf** | Backbone-KPIs, Flotte nach Fahrzeugtyp (HQ→VZ, VZ→mVZ), Routendetails (Zeile anklickbar → Detail-Fenster) |
+| **Hubs** | Hub-Verteilung, Lagerauslastung & -kosten (**Hub-Zeile anklickbar → Detail-Fenster**), Fahrzeugspezifikationen, Lieferkettenhierarchie |
+| **Belieferung** | Abdeckungsgrad (beliefert vs. nicht beliefert), **Liste der nicht belieferbaren Apotheken gruppiert nach Grund** + Hinweis auf die Einstellung „Alle Apotheken beliefern" |
 | **Verkehr** | Verkehrsquelle/-faktor, Mehrzeit je Fahrzeugtyp, am stärksten betroffene Routen |
 | **CO2 & Umwelt** | CO2-Balken nach Typ, Detail-Vergleichstabelle, CO2-Einsparung Sprinter vs. LKW |
+
+**Detail-Fenster:** In den Tabs *Last Mile*, *Hauptlauf* und *Hubs* öffnet ein Klick auf eine Zeile
+ein Pop-up mit allen Details. Für Fahrzeuge inkl. **von wo nach wo** (Start-Stadt → Ziel-Städte).
+Dasselbe Fenster lässt sich auf der Karte über den Button **„Details anzeigen"** im Info-Panel öffnen.
 
 ### Einstellungen
 
 | Abschnitt | Parameter |
 |---|---|
 | Fahrzeugflotte | Alle Fahrzeuge editierbar/löschbar, neue hinzufügbar; Felder: can_last_mile, can_backbone, Kapazität, Reichweite, CHF/km, CO₂/km, Tempo, Fahrerlohn, Stop-Zeit, Max/Hub, Priorität |
-| Optimierungsparameter | Anzahl VZ/mVZ, Lagerkapazitäten, HQ-Direktradius, Warenbedarf-Parameter, Schichtzeiten, Optimierungsgewichte |
+| Gewichtung | Interaktive Slider für Kosten/Zeit/Umwelt (Summe 100 %) mit Voreinstellungen (Kostenfokus, Ausgewogen, Zeitkritisch, Öko) |
+| Parameter | Anzahl VZ/mVZ, Lagerkapazitäten, HQ-Direktradius, Warenbedarf-Parameter, Schichtzeiten, Lagerkosten — sowie der Schalter **„Alle Apotheken beliefern"** (erzwingt garantierte Belieferung) |
+| Verkehrsmodell | Tageszeit-Simulation ↔ TomTom Live, Stau-Intensität, API-Key |
 | Öffnungszeiten | Apotheken und alle Hub-Typen separat konfigurierbar (Dezimalstunden, Live-Uhrzeit-Vorschau) |
 
-> **Wichtig:** Änderungen an Hub-Anzahl, Kapazitäten oder Fahrzeugflotte erfordern einen Neustart der Pipeline (Step 2 → 4).
+**Zurücksetzen:** Der Button **„Auf Standard zurücksetzen"** (oben rechts) stellt Parameter,
+Gewichtung und Fahrzeugflotte auf die Werkseinstellungen zurück (der gespeicherte TomTom-Key
+bleibt erhalten, Pipeline-Ergebnisse bleiben unverändert).
+
+> **Wichtig:** Änderungen an Hub-Anzahl, Kapazitäten oder Fahrzeugflotte erfordern einen Neustart der Pipeline (Step 2 → 4). Gewichtung und „Alle Apotheken beliefern" wirken ab erneutem Step 4.
 
 ---
 
@@ -504,9 +543,10 @@ Alle Werte sind zur Laufzeit änderbar und werden in der Datenbank gespeichert:
 | `shift_hours` | 8,0 | Schichtlänge in Stunden |
 | `traffic_factor` | 1,0 | 1,0 = Freifluss; Hook für Live-Verkehr |
 | `co2_shadow_chf` | 0,12 | CO₂-Schattenpreis (CHF/kg) |
-| `opt_weight_cost` | 0,40 | Routing-Gewicht Kosten |
-| `opt_weight_time` | 0,35 | Routing-Gewicht Zeit |
-| `opt_weight_env` | 0,25 | Routing-Gewicht CO₂ |
+| `opt_weight_cost` | 0,40 | Routing-Gewicht Kosten (Δ-Tourlänge) |
+| `opt_weight_time` | 0,35 | Routing-Gewicht Zeit (verkehrs-bereinigt) |
+| `opt_weight_env` | 0,25 | Routing-Gewicht CO₂ (Leg-Distanz) |
+| `require_full_delivery` | 0 | 1 = alle zugewiesenen Apotheken garantiert beliefern (Zwangslieferung ignoriert Schicht-/Öffnungszeit-Grenzen) |
 
 ---
 
@@ -546,6 +586,7 @@ Interaktive Dokumentation: `http://localhost:8000/docs`
 | `/api/settings/vehicles/{id}` | DELETE | Fahrzeug löschen |
 | `/api/settings/system` | GET | Alle Systemparameter |
 | `/api/settings/system` | PUT | Systemparameter aktualisieren (bulk) |
+| `/api/settings/reset` | POST | Parameter, Gewichtung und Fahrzeugflotte auf Standardwerte zurücksetzen (TomTom-Key bleibt erhalten) |
 
 ---
 
@@ -559,7 +600,8 @@ pharmacies (
     demand,           -- Warenbedarf (Einheiten), gesetzt in Step 1
     hub_name,         -- zugewiesener Hub, gesetzt in Step 3
     open_hour,        -- Öffnungszeit als Dezimalstunden (z.B. 8.0 = 08:00)
-    close_hour        -- Schließzeit als Dezimalstunden
+    close_hour,       -- Schließzeit als Dezimalstunden
+    undeliverable_reason  -- Grund, falls in Step 4 nicht beliefert (NULL = beliefert)
 )
 
 -- Hubs (HQ + VZs + mVZs)
@@ -597,7 +639,8 @@ vehicle_routes (
     total_cost_chf,   -- Gesamtkosten: km × CHF/km + h × Fahrerlohn
     co2_kg,           -- CO₂-Emissionen in kg
     restock_count,    -- Anzahl Depot-Rückfahrten (0 = keine)
-    supply_tier       -- "last_mile" oder "backbone"
+    supply_tier,      -- "last_mile" oder "backbone"
+    forced            -- true = Zwangslieferung ("Alle Apotheken beliefern")
 )
 
 -- Pipeline-Status

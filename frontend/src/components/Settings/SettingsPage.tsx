@@ -74,6 +74,19 @@ export function SettingsPage() {
     finally { setSaving(false) }
   }
 
+  const resetAll = async () => {
+    if (!confirm('Alle Einstellungen (Parameter, Gewichtung und Fahrzeugflotte) auf die Standardwerte '
+               + 'zurücksetzen? Der gespeicherte TomTom-API-Key bleibt erhalten. Pipeline-Ergebnisse '
+               + 'bleiben unverändert.')) return
+    setSaving(true); setError(null)
+    try {
+      const res = await api.resetSettings()
+      setVehicles(res.vehicles); setSysConf(res.system)
+      setSysEdits({}); setEditId(null); setEditBuf({}); flashSaved()
+    } catch (e) { setError(e instanceof Error ? e.message : String(e)) }
+    finally { setSaving(false) }
+  }
+
   const flashSaved = () => { setSaved(true); setTimeout(() => setSaved(false), 2500) }
 
   const sysVal = (key: string) => sysEdits[key] ?? sysConf.find(c => c.key === key)?.value ?? ''
@@ -108,6 +121,17 @@ export function SettingsPage() {
                 Gespeichert
               </div>
             )}
+            <button onClick={resetAll} disabled={saving}
+              title="Parameter, Gewichtung und Flotte auf Standardwerte zurücksetzen"
+              className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg font-medium border
+                         border-slate-600 text-slate-300 hover:text-white hover:border-red-500/60
+                         hover:bg-red-950/30 transition-colors disabled:opacity-50">
+              <svg className="w-3.5 h-3.5" viewBox="0 0 16 16" fill="none">
+                <path d="M13.5 8a5.5 5.5 0 1 1-1.6-3.9M13.5 2v3h-3" stroke="currentColor" strokeWidth="1.4"
+                      strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+              Auf Standard zurücksetzen
+            </button>
           </div>
         </div>
 
@@ -187,6 +211,27 @@ export function SettingsPage() {
             </p>
           </div>
           <div className="px-5 py-5">
+            {/* Alle Apotheken beliefern (erzwingen) */}
+            {(() => {
+              const on = (sysVal('require_full_delivery') || '0') === '1'
+              return (
+                <div className="mb-5 flex items-start justify-between gap-4 rounded-xl border border-slate-700/60 bg-slate-800/30 px-4 py-3">
+                  <div>
+                    <p className="text-sm font-semibold text-slate-200">Alle Apotheken beliefern (erzwingen)</p>
+                    <p className="text-xs text-slate-500 mt-0.5 max-w-xl leading-relaxed">
+                      Garantiert, dass jede zugewiesene Apotheke beliefert wird. Zwangslieferungen ignorieren
+                      Schicht- und Öffnungszeit-Grenzen. Andernfalls bleiben nicht erreichbare Apotheken offen
+                      (Gründe siehe Analyse → Belieferung). Wirkt ab dem nächsten <strong>Schritt 4</strong>.
+                    </p>
+                  </div>
+                  <button onClick={() => setSysEdits(p => ({ ...p, require_full_delivery: on ? '0' : '1' }))}
+                    role="switch" aria-checked={on}
+                    className={`relative flex-shrink-0 w-11 h-6 rounded-full transition-colors ${on ? 'bg-emerald-500' : 'bg-slate-600'} hover:brightness-110`}>
+                    <span className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform ${on ? 'translate-x-5' : 'translate-x-0'}`} />
+                  </button>
+                </div>
+              )
+            })()}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-4">
               {[
                 'n_vz', 'hub_min_utilization',

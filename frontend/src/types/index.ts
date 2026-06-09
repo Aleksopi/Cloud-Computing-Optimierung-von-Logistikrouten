@@ -167,6 +167,9 @@ export interface IndividualRoute {
   vehicle_id:    string
   vehicle_type:  string
   hub_name:      string
+  from_city?:    string
+  to_cities?:    string[]
+  forced?:       boolean
   stop_count:    number
   total_km:      number
   total_hours:   number
@@ -186,6 +189,23 @@ export interface HubLoad {
   capacity: number
   pct:      number
   warehouse_cost: number | null
+  city?:            string
+  parent_hub?:      string | null
+  pharmacy_count?:  number
+  delivery_window?: string
+  opening_hours?:   string
+  vehicle_counts?:  Record<string, number>
+  route_km?:        number
+  route_items?:     number
+}
+
+export interface UndeliveredEntry {
+  id:       number
+  name:     string
+  city:     string
+  hub_name: string | null
+  demand:   number | null
+  reason:   string
 }
 
 export interface BackboneRoute extends IndividualRoute {
@@ -269,6 +289,7 @@ export interface FullSummary {
     unrouted_pharmacies: number
     served_pharmacies: number
     undelivered_pharmacies: number
+    undelivered_list: UndeliveredEntry[]
     hub_loads: HubLoad[]
   }
   fleet_utilization: Record<string, FleetUtilization>
