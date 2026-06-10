@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { api } from '../../api/client'
-import type { FullSummary, PipelineStatus, VzStats, VehicleConfig, IndividualRoute, HubLoad } from '../../types'
+import type { FullSummary, PipelineStatus, VzStats, VehicleConfig, IndividualRoute, HubLoad, Savings } from '../../types'
 import { COLORS, VEHICLE_ROUTE_COLOR } from '../Map/MapView'
 import { DetailModal, type DetailSubject } from '../common/DetailModal'
 
@@ -115,7 +115,7 @@ export function SummaryPage({ pipelineStatus }: SummaryPageProps) {
    TAB: Übersicht
 ══════════════════════════════════════════════════════════════════════════ */
 function OverviewTab({ data, co2Saved }: { data: FullSummary; co2Saved: number }) {
-  const { overview, fleet_by_type, vehicle_specs, optimization, metrics, fleet_utilization } = data
+  const { overview, fleet_by_type, vehicle_specs, optimization, metrics, fleet_utilization, savings } = data
   const deliverySpecs = vehicle_specs.filter(v => v.can_last_mile && v.enabled)
 
   return (
@@ -131,6 +131,9 @@ function OverviewTab({ data, co2Saved }: { data: FullSummary; co2Saved: number }
         <KpiCard accent="violet" label="Fahrzeugrouten"  main={`${overview.total_last_mile_routes}`}
                  sub={`Ø ${fmt(metrics.avg_stops_per_route)} Stops · ${fmt(metrics.total_driver_hours)} h`} />
       </div>
+
+      {/* Optimisation value — savings vs. naive individual deliveries */}
+      {savings && <SavingsCard savings={savings} />}
 
       {/* Traffic & optimisation context */}
       <TrafficContextCard optimization={optimization} />
@@ -754,6 +757,44 @@ function TrafficTab({ data }: { data: FullSummary }) {
 /* ══════════════════════════════════════════════════════════════════════════
    Shared sub-components
 ══════════════════════════════════════════════════════════════════════════ */
+
+/* Optimisation value: multi-stop routes vs. naive one-trip-per-pharmacy delivery */
+function SavingsCard({ savings }: { savings: Savings }) {
+  const items: [string, string, number, string][] = [
+    ['Strecke',    `${fmt(savings.saved_km)} km`,        savings.saved_km_pct,    `${fmt(savings.optimized_km)} statt ${fmt(savings.baseline_km)} km`],
+    ['Kosten',     `CHF ${fmt(savings.saved_cost_chf, 0)}`, savings.saved_cost_pct, `CHF ${fmt(savings.optimized_cost_chf, 0)} statt ${fmt(savings.baseline_cost_chf, 0)}`],
+    ['Fahrzeit',   `${fmt(savings.saved_hours)} h`,      savings.saved_hours_pct, `${fmt(savings.optimized_hours)} statt ${fmt(savings.baseline_hours)} h`],
+    ['CO2',        `${fmt(savings.saved_co2_kg)} kg`,    savings.saved_co2_pct,   `${fmt(savings.optimized_co2_kg)} statt ${fmt(savings.baseline_co2_kg)} kg`],
+  ]
+  return (
+    <div className="rounded-xl border border-emerald-700/40 bg-emerald-950/10 overflow-hidden">
+      <div className="flex items-center gap-2.5 px-4 py-3 border-b border-slate-700/40 bg-slate-800/30">
+        <span className="w-2 h-2 rounded-full bg-emerald-400" />
+        <span className="text-sm font-semibold text-slate-200">Optimierungsgewinn — Last Mile</span>
+        <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-emerald-900/40 text-emerald-300 border border-emerald-700/40">
+          {savings.pharmacies} Apotheken
+        </span>
+      </div>
+      <div className="p-4">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          {items.map(([label, abs, pct, detail]) => (
+            <div key={label}>
+              <p className="text-[10px] uppercase tracking-wide text-slate-500 mb-1">{label} gespart</p>
+              <p className="text-xl font-bold text-emerald-300">−{pct}%</p>
+              <p className="text-xs text-slate-400 mt-0.5">{abs}</p>
+              <p className="text-[10px] text-slate-600 mt-0.5">{detail}</p>
+            </div>
+          ))}
+        </div>
+        <p className="text-xs text-slate-500 mt-3 leading-relaxed">
+          Mehrstopp-Optimierung gegenüber <strong>Einzelfahrten</strong> (eine Hin-/Rückfahrt je Apotheke,
+          günstigstes Fahrzeug <strong>{savings.baseline_vehicle}</strong>). Konservative Referenz —
+          die Einsparung gegenüber unkonsolidierter Belieferung ist real höher.
+        </p>
+      </div>
+    </div>
+  )
+}
 
 function Card({ title, sub, children }: { title: string; sub?: string; children: React.ReactNode }) {
   return (

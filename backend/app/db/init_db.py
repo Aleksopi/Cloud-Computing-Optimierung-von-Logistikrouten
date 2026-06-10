@@ -32,9 +32,9 @@ DEFAULT_VEHICLES = [
 DEFAULT_SYSTEM_CONFIG = [
     ("population_per_item", "12000",  "Bevölkerung pro Warenartikel",     "Warenbedarf-Berechnung (Step 3)"),
     ("shift_hours",         "8.0",    "Schichtlänge (Stunden)",            "Maximale Fahrzeit pro Schicht"),
-    ("opt_weight_cost",     "0.40",   "Optimierungsgewicht: Kosten",       "Anteil Fahrtkosten am Score (0–1)"),
-    ("opt_weight_time",     "0.35",   "Optimierungsgewicht: Zeit",         "Anteil Fahrzeit am Score (0–1)"),
-    ("opt_weight_env",      "0.25",   "Optimierungsgewicht: Umwelt",       "Anteil CO₂ am Score (0–1)"),
+    ("opt_weight_cost",     "0.40",   "Optimierungsgewicht: Kosten",       "Gewicht der echten Grenzkosten (CHF = km × CHF/km + Fahrzeit × Fahrerlohn) im Routing-Score (0–1)"),
+    ("opt_weight_time",     "0.35",   "Optimierungsgewicht: Zeit",         "Gewicht der echten Grenzfahrzeit (OSRM-Straßenzeit, verkehrsbereinigt) im Routing-Score (0–1)"),
+    ("opt_weight_env",      "0.25",   "Optimierungsgewicht: Umwelt",       "Gewicht der echten Grenzemissionen (kg CO₂ = km × g CO₂/km) im Routing-Score (0–1)"),
     ("require_full_delivery", "0",    "Alle Apotheken beliefern (erzwingen)", "1 = jede zugewiesene Apotheke wird garantiert beliefert (Zwangslieferungen ignorieren Schicht-/Öffnungszeit-Grenzen); 0 = nicht belieferbare Apotheken bleiben offen."),
     ("traffic_factor",      "1.0",    "Verkehrsfaktor (statisch)",         "1.0 = Freifluss; >1.0 = Stau. Gilt nur wenn das Verkehrsmodell AUS ist."),
     ("live_traffic_enabled", "0",     "Verkehrsmodell (Tageszeit)",        "1 = Verkehrsmodell aktiv; 0 = statischer Verkehrsfaktor"),

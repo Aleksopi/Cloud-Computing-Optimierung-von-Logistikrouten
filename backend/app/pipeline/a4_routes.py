@@ -1,12 +1,21 @@
 """
 Step 4 — Route Optimisation (last-mile + backbone)
-Fully DB-driven, multi-objective greedy VRP (cost + time + CO₂).
+Fully DB-driven, multi-objective greedy VRP minimising a real **generalised
+cost** (Kosten in CHF + Zeit in h + Umwelt in kg CO₂).
 
-Distances are **road-network distances** from OSRM (one /table call per depot),
-not straight-line Haversine — these km drive stop selection, range, time, cost
-and CO₂. Haversine is only a fallback when OSRM is unavailable.
+Both the **road distances** (km) and the **road travel times** (h) come from
+OSRM in a single /table call per depot (``annotations=distance,duration``). The
+durations carry OSRM's real per-segment speeds (motorway vs. urban vs. mountain
+pass), so the time objective is *not* proportional to distance — minimising time
+genuinely differs from minimising distance/CO₂. Haversine distance (and
+``distance / speed`` time) is only a fallback when OSRM is unavailable.
 
-Last-mile (Hub → Apotheke): vehicles with can_last_mile=True, small-first.
+Each next stop is chosen by the marginal (insertion) generalised cost; the three
+optimisation weights minimise the real marginal CHF, hours and kg CO₂ of adding
+the stop (see ``_weighted_stop_score``) and additionally steer which vehicle is
+deployed first (see ``_weighted_vehicle_order``).
+
+Last-mile (Hub → Apotheke): vehicles with can_last_mile=True, weight-ordered.
 Backbone  (HQ → VZ, VZ → mVZ): vehicles with can_backbone=True, large-first.
 Every vehicle performs a multi-stop tour (depot → stop → stop → … → depot).
 """
@@ -22,7 +31,7 @@ import requests as _http
 from app.config import settings
 from app.db.models import Assignment, Hub, Pharmacy, SystemConfig, VehicleFleetConfig, VehicleRoute
 from app.services import tomtom
-from app.services.osrm import osrm_distance_matrix
+from app.services.osrm import osrm_distance_duration_matrix
 from app.services.traffic import effective_factor, resolve as resolve_traffic
 
 logger = logging.getLogger(__name__)
@@ -54,19 +63,50 @@ def _hav_matrix(nodes: list[tuple[float, float]]) -> np.ndarray:
     return 6371.0 * 2 * np.arcsin(np.sqrt(np.clip(a, 0.0, 1.0)))
 
 
-def _road_matrix(nodes: list[tuple[float, float]]) -> np.ndarray:
-    """Road-network distance matrix (km) over [depot, stop_1, …, stop_n].
+def _road_matrices(nodes: list[tuple[float, float]]) -> tuple[np.ndarray, np.ndarray | None]:
+    """Road-network **distance (km)** and **free-flow time (h)** matrices over
+    [depot, stop_1, …, stop_n].
 
-    Uses OSRM; falls back to Haversine entirely when OSRM is unavailable, and
-    patches individual unreachable pairs with their straight-line distance."""
+    Distances drive range, cost and CO₂; the duration matrix carries OSRM's real
+    per-segment road speeds and is used as the free-flow time base for the time
+    objective (so time ≠ distance per leg). Falls back to Haversine distance and
+    ``None`` duration when OSRM is unavailable; unreachable pairs are patched with
+    their straight-line distance.
+    """
     hv = _hav_matrix(nodes)
-    road = osrm_distance_matrix(nodes)
-    if road is None or road.shape != hv.shape:
-        return hv
-    if not np.isfinite(road).all():
-        road = np.where(np.isfinite(road), road, hv)
-    np.fill_diagonal(road, 0.0)
-    return road
+    dist, dur = osrm_distance_duration_matrix(nodes)
+    if dist is None or dist.shape != hv.shape:
+        return hv, None
+    if not np.isfinite(dist).all():
+        dist = np.where(np.isfinite(dist), dist, hv)
+    np.fill_diagonal(dist, 0.0)
+    if dur is not None and dur.shape == hv.shape:
+        np.fill_diagonal(dur, 0.0)
+    else:
+        dur = None
+    return dist, dur
+
+
+def _road_matrix(nodes: list[tuple[float, float]]) -> np.ndarray:
+    """Road-network distance matrix (km) only — used by the forced-delivery pass."""
+    return _road_matrices(nodes)[0]
+
+
+def _implied_speed_kmh(dist: np.ndarray, dur: np.ndarray | None) -> float | None:
+    """Average road speed (km/h) implied by the OSRM matrices over this depot's
+    legs: ``Σ distance / Σ duration`` across finite, non-zero entries.
+
+    Used to rescale OSRM's (car-based) free-flow times onto each vehicle's
+    configured average speed while preserving the relative urban/motorway shape
+    of the road network. ``None`` when no usable duration data is available."""
+    if dur is None:
+        return None
+    mask = np.isfinite(dur) & (dur > 1e-9) & np.isfinite(dist)
+    tot_h = float(dur[mask].sum())
+    tot_km = float(dist[mask].sum())
+    if tot_h <= 1e-9 or tot_km <= 1e-9:
+        return None
+    return tot_km / tot_h
 
 
 def _nrm(x: float, xs: list[float]) -> float:
@@ -75,28 +115,34 @@ def _nrm(x: float, xs: list[float]) -> float:
     return 0.0 if hi <= lo else (x - lo) / (hi - lo)
 
 
-def _weighted_stop_score(marg_km: float, leg_km: float, drive_h: float,
-                         margs: list[float], legs: list[float], drives: list[float],
+def _weighted_stop_score(cost_chf: float, time_h: float, co2_kg: float,
+                         costs: list[float], times: list[float], co2s: list[float],
                          opt: dict) -> float:
-    """Multi-objective next-stop score (lower = better), genuinely weight-sensitive.
+    """Multi-objective next-stop score — a genuine **generalised cost** (lower =
+    better). Each objective is the real *marginal* (insertion) quantity of the
+    candidate stop in its natural unit, so the weights optimise what they claim:
 
-    Each objective minimises a *different* per-candidate quantity, so the three
-    weights move the route in distinct directions (instead of all collapsing onto
-    "nearest", which made the weights inert):
+    * **Kosten**  → ``Δkm · CHF/km + Δh · Fahrerlohn`` — real marginal CHF
+      (operating cost of the added distance **plus** the labour cost of the
+      added, traffic-adjusted driving time).
+    * **Zeit**    → ``Δh`` — real marginal driving time. ``Δh`` comes from OSRM's
+      road-network times (or live TomTom), so it is *not* proportional to ``Δkm``
+      (a short urban detour can cost more time than a longer motorway leg) — this
+      is why the time weight changes the route even without live traffic.
+    * **Umwelt**  → ``Δkm · g CO₂/km`` — real marginal emissions of the added
+      distance.
 
-    * **Kosten**  → marginal tour-length added by the stop (incl. the return leg):
-      ``d(here→stop) + d(stop→depot) − d(here→depot)`` ⇒ compact, low-km tours.
-    * **Umwelt**  → the immediately added driving distance ``d(here→stop)``
-      (emissions of the next leg).
-    * **Zeit**    → the **traffic-adjusted** driving time of the next leg
-      (``drive_h``) ⇒ avoids congested legs; diverges from distance under
-      live TomTom / simulated traffic, so the weights also bite *with* live traffic.
+    where the marginal (insertion) delta is
+    ``Δx = x(here→stop) + x(stop→depot) − x(here→depot)`` for both distance and
+    time. Components are min-max normalised across the current candidate set so
+    each weight has balanced leverage despite the different units (CHF / h / kg).
 
-    Components are min-max normalised across the current candidate set so each
-    weight has balanced leverage regardless of the raw unit scales."""
-    return (opt["weight_cost"] * _nrm(marg_km, margs)
-            + opt["weight_env"]  * _nrm(leg_km,  legs)
-            + opt["weight_time"] * _nrm(drive_h, drives))
+    Cost is a *blend* of distance and time, the environment objective is pure
+    distance and the time objective is pure (road-)time, so the three weights
+    span a genuine trade-off plane rather than collapsing onto one another."""
+    return (opt["weight_cost"] * _nrm(cost_chf, costs)
+            + opt["weight_time"] * _nrm(time_h,  times)
+            + opt["weight_env"]  * _nrm(co2_kg,  co2s))
 
 
 def _unrouted_reason(stop: dict, dmat, vehicles: list[dict], opt: dict) -> str:
@@ -148,29 +194,44 @@ def _solve_vrp(
     that no vehicle could serve, each annotated with a ``reason``.
 
     Distances come from a road-network matrix over [depot, stop_1, …, stop_n];
-    every stop carries its matrix index in ``_node`` (depot = 0). When ``use_tomtom``
-    is set a traffic-aware travel-time matrix (hours) is fetched from TomTom and
-    drives the time component; missing/failed entries fall back to
-    ``distance / speed × traffic_factor`` (the simulation/static behaviour)."""
+    every stop carries its matrix index in ``_node`` (depot = 0). The free-flow
+    travel time uses OSRM's real road-network durations (rescaled to each
+    vehicle's average speed), so the time objective is not proportional to
+    distance. When ``use_tomtom`` is set a traffic-aware travel-time matrix
+    (hours) is fetched from TomTom and overrides the time component; missing or
+    failed entries fall back to ``OSRM-time × traffic_factor`` (or, if OSRM has no
+    duration data, to ``distance / speed × traffic_factor``)."""
     routes: list[dict] = []
     remaining = list(stops)
 
-    # Road-network distance matrix (km) over depot + all stops; depot is node 0.
+    # Road-network distance (km) + free-flow time (h) matrices over depot + stops.
     nodes = [(depot_lat, depot_lon)] + [(s["lat"], s["lon"]) for s in stops]
-    dmat = _road_matrix(nodes)
+    dmat, durmat = _road_matrices(nodes)
+    implied_kmh = _implied_speed_kmh(dmat, durmat)   # avg OSRM road speed for this depot
     tmat, hub_traffic_error = (tomtom.matrix_durations_h(tomtom_key, nodes) if use_tomtom else (None, None))
     route_source = "tomtom" if tmat is not None else opt.get("fallback_source", "static")
     for k, s in enumerate(stops, start=1):
         s["_node"] = k
 
+    def _freeflow_h(i: int, j: int, d_km: float, speed: float) -> float:
+        """Congestion-free driving hours for edge i→j. Uses OSRM's real road
+        time rescaled so the depot-average matches the vehicle's configured speed
+        (keeps the urban/motorway shape but honours per-vehicle pace); falls back
+        to ``distance / speed`` when OSRM has no duration data."""
+        if durmat is not None and implied_kmh:
+            t = float(durmat[i, j])
+            if np.isfinite(t):
+                return t * (implied_kmh / speed)
+        return d_km / speed
+
     def _drive_h(i: int, j: int, d_km: float, speed: float) -> float:
-        """Traffic-adjusted driving hours for edge i→j. TomTom matrix if finite,
-        else free-flow time scaled by the configured traffic factor."""
+        """Traffic-adjusted driving hours for edge i→j. Live TomTom matrix if
+        finite, else the free-flow road time scaled by the configured factor."""
         if tmat is not None:
             t = float(tmat[i, j])
             if np.isfinite(t):
                 return t
-        return (d_km / speed) * opt["traffic_factor"]
+        return _freeflow_h(i, j, d_km, speed) * opt["traffic_factor"]
 
     for vconf in vehicles:
         if not remaining:
@@ -201,15 +262,18 @@ def _solve_vrp(
 
             while remaining:
                 # ── Phase 1: gather all feasible candidates for the next stop ──
+                d_cur_back = float(dmat[cur_idx, 0])              # road km here→depot
+                t_cur_back = _drive_h(cur_idx, 0, d_cur_back, speed)  # time here→depot
                 cand: list[dict] = []
                 for idx, stop in enumerate(remaining):
                     if stop["demand"] > items_loaded:
                         continue
-                    d_to   = float(dmat[cur_idx, stop["_node"]])    # road km here→stop
-                    d_back = float(dmat[stop["_node"], 0])          # road km stop→depot
+                    node   = stop["_node"]
+                    d_to   = float(dmat[cur_idx, node])    # road km here→stop
+                    d_back = float(dmat[node, 0])          # road km stop→depot
                     if km_used + d_to + d_back > range_km:
                         continue
-                    drive_h = _drive_h(cur_idx, stop["_node"], d_to, speed)
+                    drive_h = _drive_h(cur_idx, node, d_to, speed)
                     if hours_used + drive_h + svc_min / 60.0 > opt["shift_hours"]:
                         continue
                     # ── Opening-hours constraint ───────────────────────────
@@ -220,24 +284,29 @@ def _solve_vrp(
                         continue   # arrives before opening (no waiting in model)
                     if stop_close < 24.0 and arrival_h + svc_min / 60.0 > stop_close:
                         continue   # service would exceed closing time
-                    # Marginal tour-length added (incl. the new return leg) — the
-                    # cost objective; the immediate leg distance feeds the CO₂
-                    # objective and the traffic-adjusted time the time objective.
-                    d_cur_back = float(dmat[cur_idx, 0])
+                    # ── Marginal (insertion) cost / time / CO₂ of this stop ──
+                    # Δ over distance and time incl. the new return leg:
+                    #   Δx = x(here→stop) + x(stop→depot) − x(here→depot)
+                    t_back  = _drive_h(node, 0, d_back, speed)
+                    marg_km = d_to + d_back - d_cur_back
+                    marg_h  = drive_h + t_back - t_cur_back
+                    cost_chf = marg_km * cost_km + marg_h * driver_h   # CHF: fuel + labour
+                    co2_kg   = marg_km * co2_g_km / 1000.0             # kg CO₂ of added km
                     cand.append({"idx": idx, "d_to": d_to, "drive_h": drive_h,
-                                 "marg": d_to + d_back - d_cur_back})
+                                 "ff": _freeflow_h(cur_idx, node, d_to, speed),
+                                 "cost_chf": cost_chf, "time_h": marg_h, "co2_kg": co2_kg})
 
                 if not cand:
                     break
 
-                # ── Phase 2: weighted, normalised multi-objective choice ──────
-                margs  = [c["marg"]    for c in cand]
-                legs   = [c["d_to"]    for c in cand]
-                drives = [c["drive_h"] for c in cand]
+                # ── Phase 2: weighted, normalised generalised-cost choice ─────
+                costs = [c["cost_chf"] for c in cand]
+                times = [c["time_h"]   for c in cand]
+                co2s  = [c["co2_kg"]   for c in cand]
                 best = min(cand, key=lambda c: (
-                    _weighted_stop_score(c["marg"], c["d_to"], c["drive_h"], margs, legs, drives, opt),
+                    _weighted_stop_score(c["cost_chf"], c["time_h"], c["co2_kg"], costs, times, co2s, opt),
                     c["d_to"]))   # tie-break: nearest leg
-                best_idx, best_d, best_drive = best["idx"], best["d_to"], best["drive_h"]
+                best_idx, best_d, best_drive, best_ff = best["idx"], best["d_to"], best["drive_h"], best["ff"]
 
                 stop = remaining.pop(best_idx)
                 route_ids.append(stop["id"])
@@ -247,7 +316,7 @@ def _solve_vrp(
                 km_used      += best_d
                 total_co2_g  += best_d * co2_g_km
                 hours_used   += best_drive + svc_min / 60.0
-                free_flow_h  += best_d / speed
+                free_flow_h  += best_ff
                 cur_idx       = stop["_node"]
 
             if route_ids:

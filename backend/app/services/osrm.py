@@ -78,6 +78,42 @@ def osrm_distance_matrix(points: list[tuple]) -> np.ndarray | None:
         return None
 
 
+def osrm_distance_duration_matrix(points: list[tuple]) -> tuple[np.ndarray | None, np.ndarray | None]:
+    """Full road-network **distance (km)** AND **travel-time (h)** matrices between
+    all ``points`` [(lat, lon), ...] in a single OSRM ``/table`` request.
+
+    The duration matrix carries OSRM's real per-segment road speeds (motorway vs.
+    urban vs. mountain pass), so a 10 km city leg takes longer than a 10 km
+    motorway leg. Step 4 uses this as the *free-flow* time base, which makes the
+    time objective genuinely diverge from pure distance (a leg can be short yet
+    slow). Unreachable pairs come back as NaN; returns ``(None, None)`` on failure
+    so the caller falls back to ``distance / configured-speed``.
+    """
+    n = len(points)
+    if n < 2:
+        z = np.zeros((n, n), dtype=np.float64)
+        return z, z.copy()
+
+    url = (
+        f"{settings.osrm_url}/table/v1/driving/{_lonlat(points)}"
+        f"?annotations=distance,duration"
+    )
+    try:
+        r = requests.get(url, timeout=120)
+        r.raise_for_status()
+        data = r.json()
+        raw_d = data.get("distances")
+        raw_t = data.get("durations")
+        if raw_d is None or raw_t is None:
+            return None, None
+        dist_m = np.array([[np.nan if v is None else v for v in row] for row in raw_d], dtype=np.float64)
+        time_s = np.array([[np.nan if v is None else v for v in row] for row in raw_t], dtype=np.float64)
+        return dist_m / 1000.0, time_s / 3600.0
+    except Exception as e:
+        logger.warning(f"OSRM distance/duration matrix failed ({e}), caller will fall back")
+        return None, None
+
+
 def osrm_geometry(origin: tuple, destination: tuple) -> list[list[float]]:
     """
     Returns [[lon, lat], ...] for the driving route. Falls back to straight line on error.

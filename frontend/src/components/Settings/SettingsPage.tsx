@@ -469,9 +469,9 @@ type Weights = { cost: number; time: number; env: number }
 const WKEYS = ['cost', 'time', 'env'] as const
 
 const WMETA: Record<keyof Weights, { label: string; color: string; desc: string }> = {
-  cost: { label: 'Kosten',  color: '#3b82f6', desc: 'Fahrtkosten (km × CHF/km)' },
-  time: { label: 'Zeit',    color: '#f59e0b', desc: 'Fahrzeit × Fahrerlohn' },
-  env:  { label: 'Umwelt',  color: '#10b981', desc: 'CO₂ × Schattenpreis' },
+  cost: { label: 'Kosten',  color: '#3b82f6', desc: 'Grenzkosten: Δkm × CHF/km + Δh × Lohn' },
+  time: { label: 'Zeit',    color: '#f59e0b', desc: 'Grenzfahrzeit Δh (OSRM-Straßenzeit)' },
+  env:  { label: 'Umwelt',  color: '#10b981', desc: 'Grenzemissionen: Δkm × g CO₂/km' },
 }
 
 const WEIGHT_PRESETS: { label: string; w: Weights }[] = [
@@ -598,11 +598,14 @@ function WeightsTab({ sysConf, setSysConf, flashSaved, setError }: {
 
         {/* Score formula */}
         <div className="bg-slate-800/50 border border-slate-700/40 rounded-xl p-3 space-y-1.5">
-          <p className="text-xs font-semibold text-slate-300">Score-Formel (niedriger = besser)</p>
+          <p className="text-xs font-semibold text-slate-300">Score-Formel — verallgemeinerte Grenzkosten (niedriger = besser)</p>
           <p className="text-xs text-slate-500 font-mono leading-relaxed">
-            <span style={{ color: WMETA.cost.color }}>{w.cost.toFixed(2)}</span> × (km × CHF/km)
-            + <span style={{ color: WMETA.time.color }}>{w.time.toFixed(2)}</span> × (h × Fahrerlohn)
-            + <span style={{ color: WMETA.env.color }}>{w.env.toFixed(2)}</span> × (CO₂ × Schattenpreis)
+            <span style={{ color: WMETA.cost.color }}>{w.cost.toFixed(2)}</span> × norm(Δkm·CHF/km + Δh·Lohn)
+            + <span style={{ color: WMETA.time.color }}>{w.time.toFixed(2)}</span> × norm(Δh)
+            + <span style={{ color: WMETA.env.color }}>{w.env.toFixed(2)}</span> × norm(Δkm·gCO₂/km)
+          </p>
+          <p className="text-[10px] text-slate-600 leading-relaxed">
+            Δ = Insertions-Grenzwert je Stop. Fahrzeit Δh aus echten OSRM-Straßenzeiten ⇒ Zeit ≠ Distanz.
           </p>
         </div>
 

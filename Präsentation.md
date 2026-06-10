@@ -722,32 +722,36 @@ with ThreadPoolExecutor(max_workers=8) as pool:
 VRP = Vehicle Routing Problem. Das klassische VRP ist NP-schwer. Unser Greedy-Ansatz liefert in Sekunden eine gute (nicht optimale) Lösung.
 
 ```
-Für jeden Hub:
+Für jeden Hub (Distanz UND Fahrzeit aus OSRM, ein /table-Aufruf: distance,duration):
   Fahrzeugreihenfolge nach Gewichten (Kosten→günstigstes, Zeit→schnellstes, Umwelt→sauberstes):
   Für jedes verfügbare Fahrzeug:
     1. Lade Fahrzeug voll (items_loaded = capacity)
     2. Starte am Hub
     3. Sammle alle zulässigen Kandidaten-Stops (Kapazität, Reichweite, Schicht, Öffnungszeiten)
-    4. Wähle den Kandidaten mit kleinstem gewichteten, NORMIERTEN Score:
-       score = w_cost × norm(Δ_Tourlänge)   (zusätzl. Fahrstrecke inkl. Rückweg)
-             + w_env  × norm(d_to)           (unmittelbare Leg-Distanz, Emissionen)
-             + w_time × norm(drive_h)        (verkehrs-/stau-bereinigte Fahrzeit)
+    4. Wähle den Kandidaten mit kleinsten gewichteten, NORMIERTEN Grenzkosten:
+       Δkm = d(hier→Stop)+d(Stop→Depot)−d(hier→Depot)   (Insertions-Distanz)
+       Δh  = t(hier→Stop)+t(Stop→Depot)−t(hier→Depot)   (Insertions-Straßenzeit)
+       score = w_cost × norm(Δkm·CHF/km + Δh·Lohn)   (echte Kosten in CHF)
+             + w_time × norm(Δh)                      (echte Fahrzeit in h)
+             + w_env  × norm(Δkm·gCO₂/km)             (echte Emissionen in kg)
     5. Stop hinzufügen, Restkapazität reduzieren
     6. Wenn kein Stop mehr möglich: zum Hub zurückfahren
     7. Nächstes Fahrzeug beginnt
 ```
 
-#### Warum NORMIERTE Multi-Objektiv-Auswahl?
+#### Warum verallgemeinerte Kosten (generalized cost) + echte Straßenzeiten?
 
-Der frühere Score addierte alle drei Komponenten als CHF-Beträge — alle drei waren
-distanzproportional, sodass die Gewichte **dieselbe** „nächster Stop"-Reihenfolge ergaben und
-faktisch wirkungslos waren (CO₂ war zudem ~30× kleiner als die Kosten). Jetzt minimiert jedes
-Objektiv eine **andere** Größe und die Werte werden über die Kandidatenmenge min-max-normiert:
+Jedes Objektiv ist die **echte Grenzgröße** des Stops in seiner natürlichen Einheit (CHF / h / kg
+CO₂), min-max-normiert über die Kandidatenmenge, damit die Gewichte trotz verschiedener Größen-
+ordnungen balanciert wirken (CO₂ ist sonst ~30× kleiner als die Kosten). Der Schlüssel gegen das
+frühere „alle drei sind distanzproportional und kollabieren auf dieselbe Reihenfolge":
 
-- **Kosten** → kompakte Touren (minimiert zusätzliche Gesamtfahrstrecke inkl. Rückweg)
-- **Umwelt** → minimiert die unmittelbar hinzugefügte Fahrstrecke (Emissionen pro Leg)
-- **Zeit** → minimiert die stau-bereinigte Fahrzeit; bei TomTom Live weicht sie von der reinen
-  Distanz ab → **die Gewichte wirken auch mit Live-Verkehr**
+- **Fahrzeit aus echten OSRM-Straßenzeiten** (Dauer-Matrix): ein 10-km-Stadtleg dauert länger als
+  ein 10-km-Autobahnleg ⇒ `Δh` ist **nicht** proportional zu `Δkm`. Zeit-Minimierung erzeugt damit
+  nachweislich eine **andere (schnellere) Route** als Distanz-/CO₂-Minimierung — **auch ohne**
+  Live-Verkehr.
+- **Kosten = Distanz + Zeit** (Betrieb + Lohn), **Umwelt = reine Distanz**, **Zeit = reine
+  Straßenzeit** ⇒ die drei Gewichte spannen eine echte Zielkonflikt-Ebene auf statt zu kollabieren.
 
 So verändern unterschiedliche Gewichtungen (Kostenfokus / Zeitkritisch / Öko) die Route real —
 sicht- und messbar in Routenanzahl, km, Kosten und CO₂.
@@ -779,25 +783,30 @@ with ThreadPoolExecutor(max_workers=8) as pool:
 
 ### Gewichtete Stop-Auswahl — Die zentrale Routing-Entscheidung
 
-Jeder nächste Stop wird über einen gewichteten, **normierten** Multi-Objektiv-Score gewählt.
-Jedes Objektiv minimiert eine andere Größe, damit die Gewichte die Route real verändern:
+Jeder nächste Stop wird über die gewichteten, **normierten verallgemeinerten Grenzkosten** gewählt.
+Jedes Objektiv ist die echte Grenzgröße des Stops in seiner natürlichen Einheit (CHF / h / kg CO₂):
 
 ```
-score = w_cost × norm(Δ_Tourlänge)   ← d(hier→Stop)+d(Stop→Depot)−d(hier→Depot)
-      + w_env  × norm(d_to)           ← unmittelbar hinzugefügte Fahrstrecke
-      + w_time × norm(drive_h)        ← verkehrs-/stau-bereinigte Fahrzeit (TomTom/Sim.)
+Δkm = d(hier→Stop)+d(Stop→Depot)−d(hier→Depot)   (Insertions-Distanz)
+Δh  = t(hier→Stop)+t(Stop→Depot)−t(hier→Depot)   (Insertions-Straßenzeit, OSRM/verkehrsbereinigt)
+
+score = w_cost × norm(Δkm·CHF/km + Δh·Lohn)   ← echte Kosten (Betrieb + Lohn)
+      + w_time × norm(Δh)                      ← echte Fahrzeit
+      + w_env  × norm(Δkm·gCO₂/km)             ← echte Emissionen
 ```
 
 `norm(...)` = Min-Max-Normierung über die aktuelle Kandidatenmenge → jedes Gewicht hat balancierte
-Hebelwirkung (auch CO₂, das vorher gegenüber den Kosten verschwindend klein war).
+Hebelwirkung (auch CO₂, das vorher gegenüber den Kosten verschwindend klein war). Da `Δh` aus echten
+OSRM-Straßenzeiten stammt, ist Zeit **nicht** proportional zur Distanz — die Gewichte verändern die
+Route auch ohne Live-Verkehr.
 
 **Konfigurierbare Gewichte** (Standard):
 
 | Gewicht | Wert | Minimiert |
 |---|---|---|
-| `w_cost` | 0.40 (40%) | zusätzliche Gesamtfahrstrecke (kompakte Touren) |
-| `w_time` | 0.35 (35%) | stau-bereinigte Fahrzeit (wirkt mit Live-Verkehr) |
-| `w_env` | 0.25 (25%) | unmittelbare Emissions-Fahrstrecke |
+| `w_cost` | 0.40 (40%) | echte Grenzkosten in CHF (`Δkm·CHF/km + Δh·Lohn`) |
+| `w_time` | 0.35 (35%) | echte Grenzfahrzeit `Δh` (OSRM-Straßenzeit, verkehrsbereinigt) |
+| `w_env` | 0.25 (25%) | echte Grenzemissionen `Δkm·gCO₂/km` in kg |
 
 Zusätzlich steuern die Gewichte die **Fahrzeugreihenfolge** je Hub (günstig / schnell / sauber zuerst).
 
@@ -810,18 +819,24 @@ Zusätzlich steuern die Gewichte die **Fahrzeugreihenfolge** je Hub (günstig / 
 | **Schicht** | `hours_used + Fahrzeit + Service ≤ shift_hours` | 8-Stunden-Schicht |
 | **Öffnungszeiten** | `open_hour ≤ Ankunft ≤ close_hour − service_min/60` | Apotheke muss offen sein |
 
-### Traffic Factor — Verbindung zu Live-Verkehr
+### Fahrzeit & Traffic Factor — Verbindung zu Live-Verkehr
 
 ```python
-# In a4_routes.py wird die Fahrzeit skaliert:
-drive_h = (d_km / vehicle.speed_kmh) × traffic_factor
+# In a4_routes.py ist die Freifluss-Fahrzeit die ECHTE OSRM-Straßenzeit der Kante,
+# umskaliert auf das Fahrzeugtempo (behält die Stadt/Autobahn-Form bei):
+freeflow_h = osrm_dauer_h × (Ø_Straßentempo / vehicle.speed_kmh)
 
-# traffic_factor = 1.0 → Freifluss
-# traffic_factor = 1.45 → Morgenspitze (Simulation)
-# traffic_factor = TomTom-API-Wert → Echtzeit
+# Realisierte Fahrzeit:
+drive_h = freeflow_h × traffic_factor        # Simulation / statisch
+drive_h = tomtom_matrix_h                     # Live-Verkehr (echte Echtzeit)
+
+# traffic_factor = 1.0 → Freifluss · 1.45 → Morgenspitze (Sim.) · TomTom → Echtzeit
 ```
 
-Der `traffic_factor` ist in der Datenbank konfigurierbar — ein einziger Wert beeinflusst alle Routen aller Fahrzeuge gleichzeitig.
+Weil die Freifluss-Zeit aus OSRM-Straßenzeiten kommt (statt `Distanz/Tempo`), unterscheidet sich die
+Fahrzeit pro Kante real von der Distanz — Grundlage dafür, dass das **Zeit-Ziel** eine andere Route
+liefert als das Distanz-/CO₂-Ziel. Der `traffic_factor` ist in der Datenbank konfigurierbar; bei
+TomTom Live liefert eine Matrix pro Kante echte verkehrsbereinigte Zeiten.
 
 ### Fahrzeugflotte — Technische Parameter
 
@@ -1008,21 +1023,29 @@ Nach Abschluss aller 4 Steps ist die Karte interaktiv navigierbar:
 
 | Anforderung | Status | Umsetzung |
 |---|---|---|
-| **Routenoptimierung** | ✅ Vollständig | Greedy VRP mit Multi-Objekt-Score |
-| **Graphenalgorithmen** | ✅ Vollständig | Greedy p-Median für Hub Placement |
-| **Faktor: Entfernung** | ✅ Vollständig | Haversine (Placement) + OSRM Straßen |
-| **Faktor: Verkehr** | ⚠️ Vorbereitet | `traffic_factor` konfigurierbar; TomTom API integriert |
-| **Faktor: Transportkapazität** | ✅ Vollständig | Kapazität pro Fahrzeug und Hub |
-| **Kosten-Optimierung** | ✅ Vollständig | CHF/km + Fahrerlohn im Score |
-| **Zeit-Optimierung** | ✅ Vollständig | Fahrzeit × Fahrerlohn im Score |
-| **Umwelt-Optimierung** | ✅ Vollständig | CO₂-Emissionen monetarisiert |
-| **OpenStreetMap-Daten** | ✅ Vollständig | OSRM mit echtem CH-Straßennetz |
+| **Routenoptimierung** | ✅ Vollständig | Greedy Multi-Objektiv-VRP mit verallgemeinerten Kosten (CHF + h + kg CO₂) |
+| **Graphenalgorithmen** | ✅ Vollständig | Greedy p-Median (Hub Placement) + VRP auf dem OSRM-Straßengraphen |
+| **Faktor: Entfernung** | ✅ Vollständig | OSRM-Straßendistanz (Routing) + Haversine (Placement) |
+| **Faktor: Verkehr** | ✅ Vollständig | Echte OSRM-Straßenzeiten (Zeit ≠ Distanz) + Tageszeit-Simulation + TomTom Live |
+| **Faktor: Transportkapazität** | ✅ Vollständig | Ladekapazität pro Fahrzeug + Lagerkapazität pro Hub (harte Constraints) |
+| **Kosten-Optimierung** | ✅ Vollständig | Echte Grenzkosten `Δkm·CHF/km + Δh·Lohn` im Score |
+| **Zeit-Optimierung** | ✅ Vollständig | Echte Grenzfahrzeit (OSRM-Straßenzeit, verkehrsbereinigt) im Score |
+| **Umwelt-Optimierung** | ✅ Vollständig | Echte Grenzemissionen `Δkm·gCO₂/km`; Schattenpreis zur Monetarisierung |
+| **Nachweis der Einsparung** | ✅ Vollständig | Baseline-Vergleich (Einzelfahrten): −% km / CHF / h / CO₂ |
+| **OpenStreetMap-Daten** | ✅ Vollständig | OSRM mit echtem CH-Straßennetz (Distanz + Fahrzeit) |
 | **Interaktive Visualisierung** | ✅ Vollständig | MapLibre GL, weit über Folium hinaus |
 | **Datenbankintegration** | ✅ Vollständig | PostgreSQL + PostGIS |
 | **Cloud/Container-Betrieb** | ✅ Vollständig | Docker Compose, 6 Container |
+| **Tests / Validierung** | ✅ Vollständig | pytest-Suite (Score, Constraints, Verkehr, Einsparung) |
 
 ### Eigenleistungen über die Anforderungen hinaus
 
+- **Verallgemeinerte Kosten (generalized cost)** — der Routing-Score minimiert echte Grenzkosten in
+  CHF, Stunden und kg CO₂ statt geometrischer Proxys
+- **Echte OSRM-Straßenfahrzeiten** als Zeitbasis ⇒ Zeit-Ziel weicht nachweislich von Distanz/CO₂ ab,
+  auch ohne Live-Daten
+- **Baseline-Einsparungsnachweis** (Mehrstopp-Optimierung vs. Einzelfahrten) im Dashboard
+- **pytest-Testsuite** (19 Tests, offline lauffähig) für die Optimierungs-Kernlogik
 - **Mehrstufige Lieferkette** (HQ → VZ → mVZ → Apotheke) mit echten Backbone-Routen
 - **HQ-Direktlieferung** für nahegelegene Apotheken (konfigurierbarer Radius)
 - **Nachfragegewichtetes Hub Placement** — Hubs gehen dorthin, wo der Bedarf ist
@@ -1030,7 +1053,6 @@ Nach Abschluss aller 4 Steps ist die Karte interaktiv navigierbar:
 - **Vollständige Web-App** mit Analyse-Dashboard und Einstellungen
 - **Konfigurierbare Fahrzeugflotte** mit CRUD-Interface
 - **Öffnungszeiten-Constraint** im Routing
-- **CO₂-Tracking** pro Fahrzeug mit Analyse-Tab
 - **TomTom Live-Traffic-Integration** (API voll integriert, Key über UI verwaltbar)
 
 ---
