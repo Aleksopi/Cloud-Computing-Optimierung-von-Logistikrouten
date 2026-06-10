@@ -33,3 +33,12 @@ osrm/data/*.osm.pbf
 
 # Old workspace
 workspace/
+
+# User-specific Claude config
+.claude/
+
+# Generated outputs
+outputs/
+
+# Documentation files
+docs/
