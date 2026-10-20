@@ -1,0 +1,28 @@
+{
+  "output": "/Users/aleksferro/Desktop/Code/DHBW/4 Semester/Cloud-Computing-Optimierung-von-Logistikrouten/outputs/manual-20260611-ausblick-timetabling/presentations/ausblick-timetabling-multi-trip/output/Ausblick_Timetabling_Multi_Trip_VRP.pptx",
+  "outputBytes": 22930,
+  "slideCount": 1,
+  "slideSize": {
+    "width": 1280,
+    "height": 720
+  },
+  "previewDir": "/Users/aleksferro/Desktop/Code/DHBW/4 Semester/Cloud-Computing-Optimierung-von-Logistikrouten/outputs/manual-20260611-ausblick-timetabling/presentations/ausblick-timetabling-multi-trip/preview",
+  "previewPaths": [
+    "/Users/aleksferro/Desktop/Code/DHBW/4 Semester/Cloud-Computing-Optimierung-von-Logistikrouten/outputs/manual-20260611-ausblick-timetabling/presentations/ausblick-timetabling-multi-trip/preview/slide-01.png"
+  ],
+  "layoutDir": "/Users/aleksferro/Desktop/Code/DHBW/4 Semester/Cloud-Computing-Optimierung-von-Logistikrouten/outputs/manual-20260611-ausblick-timetabling/presentations/ausblick-timetabling-multi-trip/layout",
+  "layoutResults": [
+    {
+      "layoutPath": "/Users/aleksferro/Desktop/Code/DHBW/4 Semester/Cloud-Computing-Optimierung-von-Logistikrouten/outputs/manual-20260611-ausblick-timetabling/presentations/ausblick-timetabling-multi-trip/layout/slide-01.layout.json"
+    }
+  ],
+  "contactSheet": "/Users/aleksferro/Desktop/Code/DHBW/4 Semester/Cloud-Computing-Optimierung-von-Logistikrouten/outputs/manual-20260611-ausblick-timetabling/presentations/ausblick-timetabling-multi-trip/preview/contact-sheet.png",
+  "slides": [
+    {
+      "index": 1,
+      "requestedSlideNumber": 1,
+      "modulePath": "/Users/aleksferro/Desktop/Code/DHBW/4 Semester/Cloud-Computing-Optimierung-von-Logistikrouten/outputs/manual-20260611-ausblick-timetabling/presentations/ausblick-timetabling-multi-trip/slides/slide-01.mjs",
+      "exportName": "slide01"
+    }
+  ]
+}

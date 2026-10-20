@@ -1,0 +1,8 @@
+task mode: create
+primary deck-profile: engineering-platform
+secondary profile gates: strategy-leadership clarity for a concise final outlook slide
+required proof objects: one visual analogy between Multi-Trip-VRP and timetabling, one compact mathematical takeaway
+source/asset requirements: user-provided YouTube reference for timetabling analogy; no external imagery required
+brand authenticity constraints: match existing logistics deck language, colors, footer, and dark Ausblick style
+profile-specific QA gates: editable PPTX, readable at thumbnail, no crowded paragraphs, clear NP-hard/CSP takeaway
+known missing inputs: no source PPTX template provided in this turn; recreated visual system from prior generated slides

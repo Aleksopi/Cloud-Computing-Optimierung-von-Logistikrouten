@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<style>
+  html,body { margin:0; padding:0; background:#ffffff; }
+  svg { display:block; font-family: Arial, Helvetica, sans-serif; }
+  .title    { font-size:23px; font-weight:700; fill:#1F4E79; }
+  .subtitle { font-size:13px; font-weight:400; fill:#5A6B7B; }
+  .card     { fill:#FFFFFF; stroke:#C2D2E4; stroke-width:1.5; }
+  .stagenum { font-size:12px; font-weight:700; fill:#FFFFFF; opacity:.85; }
+  .stagettl { font-size:16.5px; font-weight:700; fill:#FFFFFF; }
+  .item     { font-size:13px; font-weight:400; fill:#33475B; }
+  .dot      { font-size:13px; font-weight:700; }
+  .note     { font-size:12px; font-weight:600; fill:#6B7B8C; }
+  .legtxt   { font-size:12px; fill:#44525F; }
+</style>
+</head>
+<body>
+<svg width="1180" height="430" viewBox="0 0 1180 430" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <marker id="aBlue" markerWidth="10" markerHeight="10" refX="7.6" refY="4" orient="auto" markerUnits="userSpaceOnUse"><path d="M0,0 L9,4 L0,8 z" fill="#5A6B7B"/></marker>
+  </defs>
+
+  <!-- Title -->
+  <text x="590" y="30" text-anchor="middle" class="title">Datenfluss der Optimierungspipeline</text>
+  <text x="590" y="52" text-anchor="middle" class="subtitle">von den Datenquellen über Aufbereitung und Optimierung bis zur Ausgabe</text>
+
+  <!-- Connector arrows between stages (drawn under cards' gaps) -->
+  <path d="M274,205 L322,205" fill="none" stroke="#5A6B7B" stroke-width="2.2" marker-end="url(#aBlue)"/>
+  <path d="M566,205 L614,205" fill="none" stroke="#5A6B7B" stroke-width="2.2" marker-end="url(#aBlue)"/>
+  <path d="M858,205 L906,205" fill="none" stroke="#5A6B7B" stroke-width="2.2" marker-end="url(#aBlue)"/>
+
+  <!-- ============ STAGE 1: Datenquellen (x=30) ============ -->
+  <rect x="30" y="80" width="244" height="252" rx="8" class="card"/>
+  <path d="M30,88 a8,8 0 0 1 8,-8 h228 a8,8 0 0 1 8,8 v38 h-244 z" fill="#2E75B6"/>
+  <text x="46" y="98" class="stagenum">SCHRITT 1</text>
+  <text x="46" y="116" class="stagettl">Datenquellen</text>
+  <g>
+    <text x="48" y="158" class="dot" fill="#2E75B6">•</text><text x="62" y="158" class="item">Apothekenstandorte (OSM)</text>
+    <text x="48" y="186" class="dot" fill="#2E75B6">•</text><text x="62" y="186" class="item">Hub-Standorte (HQ / VZ / mVZ)</text>
+    <text x="48" y="214" class="dot" fill="#2E75B6">•</text><text x="62" y="214" class="item">Bedarfswerte (Eurostat-Raster)</text>
+    <text x="48" y="242" class="dot" fill="#2E75B6">•</text><text x="62" y="242" class="item">Geodaten / Koordinaten</text>
+    <text x="48" y="270" class="dot" fill="#2E75B6">•</text><text x="62" y="270" class="item">Straßennetz / Routing (OSRM)</text>
+  </g>
+
+  <!-- ============ STAGE 2: Datenaufbereitung (x=322) ============ -->
+  <rect x="322" y="80" width="244" height="252" rx="8" class="card"/>
+  <path d="M322,88 a8,8 0 0 1 8,-8 h228 a8,8 0 0 1 8,8 v38 h-244 z" fill="#2E6DA4"/>
+  <text x="338" y="98" class="stagenum">SCHRITT 2</text>
+  <text x="338" y="116" class="stagettl">Datenaufbereitung</text>
+  <g>
+    <text x="340" y="158" class="dot" fill="#2E6DA4">•</text><text x="354" y="158" class="item">Bereinigung &amp; Validierung</text>
+    <text x="340" y="186" class="dot" fill="#2E6DA4">•</text><text x="354" y="186" class="item">Geokodierung</text>
+    <text x="340" y="214" class="dot" fill="#2E6DA4">•</text><text x="354" y="214" class="item">Normalisierung</text>
+    <text x="340" y="242" class="dot" fill="#2E6DA4">•</text><text x="354" y="242" class="item">Zuordnung der Standorte</text>
+  </g>
+
+  <!-- ============ STAGE 3: Optimierung (x=614) ============ -->
+  <rect x="614" y="80" width="244" height="252" rx="8" class="card"/>
+  <path d="M614,88 a8,8 0 0 1 8,-8 h228 a8,8 0 0 1 8,8 v38 h-244 z" fill="#1F4E79"/>
+  <text x="630" y="98" class="stagenum">SCHRITT 3</text>
+  <text x="630" y="116" class="stagettl">Optimierung</text>
+  <g>
+    <text x="632" y="158" class="dot" fill="#1F4E79">•</text><text x="646" y="158" class="item">Distanz- &amp; Fahrzeitberechnung</text>
+    <text x="632" y="186" class="dot" fill="#1F4E79">•</text><text x="646" y="186" class="item">Zuordnung zu Hubs</text>
+    <text x="632" y="214" class="dot" fill="#1F4E79">•</text><text x="646" y="214" class="item">Kapazitätsprüfung</text>
+    <text x="632" y="242" class="dot" fill="#1F4E79">•</text><text x="646" y="242" class="item">Routenbildung (VRP)</text>
+  </g>
+
+  <!-- ============ STAGE 4: Ausgabe (x=906) ============ -->
+  <rect x="906" y="80" width="244" height="252" rx="8" class="card"/>
+  <path d="M906,88 a8,8 0 0 1 8,-8 h228 a8,8 0 0 1 8,8 v38 h-244 z" fill="#2E8B6B"/>
+  <text x="922" y="98" class="stagenum">SCHRITT 4</text>
+  <text x="922" y="116" class="stagettl">Ausgabe</text>
+  <g>
+    <text x="924" y="158" class="dot" fill="#2E8B6B">•</text><text x="938" y="158" class="item">Kartenvisualisierung</text>
+    <text x="924" y="186" class="dot" fill="#2E8B6B">•</text><text x="938" y="186" class="item">Routenübersicht</text>
+    <text x="924" y="214" class="dot" fill="#2E8B6B">•</text><text x="938" y="214" class="item">Kennzahlen (KPI)</text>
+    <text x="924" y="242" class="dot" fill="#2E8B6B">•</text><text x="938" y="242" class="item">Bewertung der Ergebnisse</text>
+  </g>
+
+  <!-- Bottom note -->
+  <line x1="30" y1="372" x2="1150" y2="372" stroke="#E2E8EF" stroke-width="1.4"/>
+  <text x="30" y="396" class="note">Persistenz: PostgreSQL / PostGIS  ·  Orchestrierung: Celery / Redis (asynchron)  ·  Routing: OSRM (echte Straßenfahrzeiten)</text>
+</svg>
+</body>
+</html>

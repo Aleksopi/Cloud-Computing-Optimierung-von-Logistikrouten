@@ -1,0 +1,8 @@
+Task mode: create single slide only
+Primary deck-profile: engineering-platform
+Secondary gates: academic logistics presentation; explain road-based hub assignment clearly.
+Required proof objects: OSRM table matrix, HQ direct radius, capacity-aware assignment by drive time, route geometries persisted.
+Source/asset requirements: backend/app/pipeline/a2_influence.py; README/Präsentation Step 3 notes; backend/data/apotheken.geojson for point cloud.
+Brand/design constraints: Match existing white/navy/teal visual system. No full deck modification.
+QA gates: Render 1280x720 PNG; no text overlap; clear distinction between matrix, assignment, and map lines.
+Known missing inputs: None.

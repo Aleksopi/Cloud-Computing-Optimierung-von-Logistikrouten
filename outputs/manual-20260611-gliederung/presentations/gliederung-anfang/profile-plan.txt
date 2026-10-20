@@ -1,0 +1,8 @@
+task mode: create
+primary deck-profile: engineering-platform
+secondary profile gates: concise opening agenda slide for a logistics optimization presentation
+required proof objects: six-part agenda that mirrors the existing route optimization deck
+source/asset requirements: user-provided presentation filename as context; no external assets required
+brand authenticity constraints: match existing DHBW logistics deck palette, footer and compact technical style
+profile-specific QA gates: one-slide output, editable PPTX, readable agenda at thumbnail and full size
+known missing inputs: no exact insertion point requested; delivered as standalone opening slide

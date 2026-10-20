@@ -1,0 +1,8 @@
+Task mode: create
+Primary deck-profile: engineering-platform
+Secondary gates: targeted single-slide explanation for an academic logistics/cloud presentation.
+Required proof objects: goal statement; three objective criteria; three input constraints; measurable outcome units.
+Source/asset requirements: Use existing project context and user screenshot as visual reference. No external data needed.
+Brand/design constraints: Light academic slide, teal kicker, dark navy headline, restrained cards, no stock imagery.
+QA gates: Text must fit at 1280x720, hierarchy clear at thumbnail size, PPTX export must be editable.
+Known missing inputs: No target deck insertion point specified, so deliver as a standalone one-slide PPTX.

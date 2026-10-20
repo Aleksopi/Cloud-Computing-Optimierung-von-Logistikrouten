@@ -1,0 +1,8 @@
+Task mode: create single slide only
+Primary deck-profile: engineering-platform
+Secondary gates: academic logistics presentation, pharmacy demand model explanation.
+Required proof objects: catchment radius formula, Eurostat population cells, demand formula, actual output metrics.
+Source/asset requirements: backend/app/pipeline/a3_demand.py; backend/data/population.geojson summary; backend/data/apotheken.geojson count.
+Brand/design constraints: Match existing white/navy/teal presentation style. No full deck modification.
+QA gates: Render 1280x720 PNG; text fits; formula readable; result distribution understandable at presentation size.
+Known missing inputs: None.

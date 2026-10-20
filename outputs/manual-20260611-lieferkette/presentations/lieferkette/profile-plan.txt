@@ -1,0 +1,12 @@
+Task mode: non-template single-slide build
+
+Claim:
+Die Lieferkette ist dreistufig aufgebaut: HQ Bern als Ursprung, regionale VZs als Backbone-Ebene, lokale mVZs bzw. Hubs für die Last-Mile. Nahe Apotheken können direkt aus dem HQ beliefert werden.
+
+Evidence:
+- README section "Fahrzeugflotte & Lieferkette"
+- Praesentation.md delivery-chain overview
+- Vehicle parameters: Sprinter, Klein-LKW, LKW, Zug
+
+Slide:
+1. Aufbau der Lieferkette: Backbone und Last-Mile

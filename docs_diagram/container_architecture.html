@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<style>
+  html,body { margin:0; padding:0; background:#ffffff; }
+  svg { display:block; font-family: Arial, Helvetica, sans-serif; }
+  .title    { font-size:23px; font-weight:700; fill:#1F4E79; }
+  .subtitle { font-size:13px; font-weight:400; fill:#5A6B7B; }
+  .box      { fill:#FFFFFF; stroke:#C2D2E4; stroke-width:1.5; }
+  .extbox   { fill:#FFFFFF; stroke:#9AA7B4; stroke-width:1.5; stroke-dasharray:6 4; }
+  .btitle   { font-size:17px; font-weight:700; fill:#1F3B57; }
+  .bsub     { font-size:12.5px; font-weight:400; fill:#5A6B7B; }
+  .chip     { fill:#EEF3F9; stroke:#D2DEEA; stroke-width:1; }
+  .chiptxt  { font-size:11.5px; font-weight:700; fill:#33475B;
+              font-family:"SF Mono","Menlo","Consolas",monospace; }
+  .boundary { fill:#F6F9FC; stroke:#9CB3CC; stroke-width:1.6; stroke-dasharray:8 5; }
+  .blabel   { font-size:13px; font-weight:700; fill:#FFFFFF; }
+  .edge     { fill:none; stroke-width:1.7; }
+  .edge-d   { fill:none; stroke-width:1.7; stroke-dasharray:6 4; }
+  .elabel   { font-size:11.5px; font-weight:700; fill:#3C4A57;
+              paint-order:stroke; stroke:#FFFFFF; stroke-width:3px; stroke-linejoin:round; }
+  .note     { font-size:11px; font-weight:600; fill:#6B7B8C; }
+  .legtxt   { font-size:12px; fill:#44525F; }
+</style>
+</head>
+<body>
+<svg width="1210" height="908" viewBox="0 0 1210 908" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <marker id="aBlue"  markerWidth="9" markerHeight="9" refX="7.4" refY="4" orient="auto" markerUnits="userSpaceOnUse"><path d="M0,0 L9,4 L0,8 z" fill="#2E75B6"/></marker>
+    <marker id="aRed"   markerWidth="9" markerHeight="9" refX="7.4" refY="4" orient="auto" markerUnits="userSpaceOnUse"><path d="M0,0 L9,4 L0,8 z" fill="#C0392B"/></marker>
+    <marker id="aPg"    markerWidth="9" markerHeight="9" refX="7.4" refY="4" orient="auto" markerUnits="userSpaceOnUse"><path d="M0,0 L9,4 L0,8 z" fill="#2E6DA4"/></marker>
+    <marker id="aSlate" markerWidth="9" markerHeight="9" refX="7.4" refY="4" orient="auto" markerUnits="userSpaceOnUse"><path d="M0,0 L9,4 L0,8 z" fill="#5D6D7E"/></marker>
+    <marker id="aGray"  markerWidth="9" markerHeight="9" refX="7.4" refY="4" orient="auto" markerUnits="userSpaceOnUse"><path d="M0,0 L9,4 L0,8 z" fill="#8A97A4"/></marker>
+  </defs>
+
+  <!-- Title -->
+  <text x="605" y="34" text-anchor="middle" class="title">Container-Struktur (Docker Compose) — Pharma Logistics CH</text>
+
+  <!-- ===================== EDGES (drawn first, under boxes) ===================== -->
+  <!-- Browser -> Nginx -->
+  <path class="edge" stroke="#2E75B6" marker-end="url(#aBlue)" d="M510,114 L510,166"/>
+  <text x="520" y="134" class="elabel">HTTP</text>
+
+  <!-- Nginx -> Frontend -->
+  <path class="edge" stroke="#2E75B6" marker-end="url(#aBlue)" d="M470,238 C360,262 280,272 200,298"/>
+  <text x="300" y="262" text-anchor="middle" class="elabel">/  →  :5173</text>
+  <!-- Nginx -> Backend -->
+  <path class="edge" stroke="#2E75B6" marker-end="url(#aBlue)" d="M540,238 C560,260 540,276 512,298"/>
+  <text x="582" y="270" text-anchor="middle" class="elabel">/api  →  :8000</text>
+
+  <!-- Frontend -> Backend (REST) -->
+  <path class="edge" stroke="#2E75B6" marker-end="url(#aBlue)" d="M281,346 L398,346"/>
+  <text x="340" y="338" text-anchor="middle" class="elabel">REST</text>
+
+  <!-- Backend -> data tier -->
+  <path class="edge" stroke="#C0392B"  marker-end="url(#aRed)"   d="M448,392 C360,440 300,490 245,538"/>
+  <text x="300" y="452" text-anchor="middle" class="elabel">Broker</text>
+  <path class="edge" stroke="#2E6DA4"  marker-end="url(#aPg)"    d="M512,392 L527,538"/>
+  <text x="566" y="470" text-anchor="middle" class="elabel">SQLAlchemy</text>
+  <path class="edge" stroke="#5D6D7E"  marker-end="url(#aSlate)" d="M578,392 C660,440 740,492 808,538"/>
+  <text x="690" y="452" text-anchor="middle" class="elabel">HTTP</text>
+
+  <!-- Worker -> data tier -->
+  <path class="edge" stroke="#C0392B"  marker-end="url(#aRed)"   d="M790,392 C600,470 470,500 300,536"/>
+  <text x="560" y="486" text-anchor="middle" class="elabel">Tasks</text>
+  <path class="edge" stroke="#2E6DA4"  marker-end="url(#aPg)"    d="M848,392 C760,452 690,492 622,538"/>
+  <path class="edge" stroke="#5D6D7E"  marker-end="url(#aSlate)" d="M900,392 L878,538"/>
+
+  <!-- Worker/Backend -> TomTom (optional) -->
+  <path class="edge-d" stroke="#8A97A4" marker-end="url(#aGray)" d="M971,344 C1010,360 1030,388 1052,420"/>
+  <text x="1002" y="338" text-anchor="end" class="elabel">Live-Verkehr</text>
+
+  <!-- Postgres -> Volume -->
+  <path class="edge" stroke="#2E6DA4" marker-end="url(#aPg)" d="M535,632 L535,656"/>
+
+  <!-- ===================== COMPOSE BOUNDARY ===================== -->
+  <rect class="boundary" x="40" y="140" width="970" height="700" rx="14"/>
+  <rect x="56" y="127" width="252" height="26" rx="6" fill="#1F4E79"/>
+  <text x="68" y="145" class="blabel">Docker Compose · Container-Stack</text>
+
+  <!-- ===================== EXTERNAL: Browser ===================== -->
+  <g>
+    <rect class="box" x="410" y="58" width="200" height="56" rx="10"/>
+    <rect x="410" y="58" width="6" height="56" rx="3" fill="#6B7B8C"/>
+    <text x="428" y="86"  class="btitle">Browser / Client</text>
+    <text x="428" y="104" class="bsub">Web-App-Nutzer</text>
+  </g>
+
+  <!-- ===================== Nginx ===================== -->
+  <g>
+    <rect class="box" x="410" y="168" width="200" height="70" rx="10"/>
+    <rect x="410" y="168" width="6" height="70" rx="3" fill="#1FAA59"/>
+    <text x="428" y="198" class="btitle">nginx</text>
+    <text x="428" y="219" class="bsub">Reverse Proxy (Prod) · :80</text>
+  </g>
+
+  <!-- ===================== App tier ===================== -->
+  <!-- frontend -->
+  <g>
+    <rect class="box" x="70" y="300" width="210" height="92" rx="10"/>
+    <rect x="70" y="300" width="6" height="92" rx="3" fill="#1BA8CE"/>
+    <text x="90" y="334" class="btitle">frontend</text>
+    <text x="90" y="356" class="bsub">React + Vite</text>
+    <rect class="chip" x="90" y="366" width="60" height="19" rx="5"/>
+    <text x="100" y="379" class="chiptxt">:5173</text>
+  </g>
+  <!-- backend -->
+  <g>
+    <rect class="box" x="400" y="300" width="220" height="92" rx="10"/>
+    <rect x="400" y="300" width="6" height="92" rx="3" fill="#12897E"/>
+    <text x="420" y="334" class="btitle">backend</text>
+    <text x="420" y="356" class="bsub">FastAPI · Uvicorn</text>
+    <rect class="chip" x="420" y="366" width="60" height="19" rx="5"/>
+    <text x="430" y="379" class="chiptxt">:8000</text>
+  </g>
+  <!-- worker -->
+  <g>
+    <rect class="box" x="760" y="300" width="210" height="92" rx="10"/>
+    <rect x="760" y="300" width="6" height="92" rx="3" fill="#2E9E4F"/>
+    <text x="780" y="334" class="btitle">worker</text>
+    <text x="780" y="356" class="bsub">Celery · Pipeline</text>
+    <rect class="chip" x="780" y="366" width="118" height="19" rx="5"/>
+    <text x="790" y="379" class="chiptxt">concurrency 4</text>
+  </g>
+
+  <!-- queue hint -->
+  <text x="225" y="528" text-anchor="middle" class="note">Celery Task-Queue</text>
+
+  <!-- ===================== Data / service tier ===================== -->
+  <!-- redis -->
+  <g>
+    <rect class="box" x="120" y="540" width="210" height="92" rx="10"/>
+    <rect x="120" y="540" width="6" height="92" rx="3" fill="#C0392B"/>
+    <text x="140" y="574" class="btitle">redis</text>
+    <text x="140" y="596" class="bsub">Cache / Message-Broker</text>
+    <rect class="chip" x="140" y="606" width="60" height="19" rx="5"/>
+    <text x="150" y="619" class="chiptxt">:6379</text>
+  </g>
+  <!-- postgres -->
+  <g>
+    <rect class="box" x="430" y="540" width="210" height="92" rx="10"/>
+    <rect x="430" y="540" width="6" height="92" rx="3" fill="#2E6DA4"/>
+    <text x="450" y="574" class="btitle">postgres</text>
+    <text x="450" y="596" class="bsub">PostgreSQL + PostGIS</text>
+    <rect class="chip" x="450" y="606" width="128" height="19" rx="5"/>
+    <text x="460" y="619" class="chiptxt">:5433 → :5432</text>
+  </g>
+  <!-- osrm -->
+  <g>
+    <rect class="box" x="760" y="540" width="210" height="92" rx="10"/>
+    <rect x="760" y="540" width="6" height="92" rx="3" fill="#5D6D7E"/>
+    <text x="780" y="574" class="btitle">osrm</text>
+    <text x="780" y="596" class="bsub">Routing-Engine (CH-Straßennetz)</text>
+    <rect class="chip" x="780" y="606" width="128" height="19" rx="5"/>
+    <text x="790" y="619" class="chiptxt">:5001 → :5000</text>
+  </g>
+
+  <!-- ===================== Volume (cylinder) ===================== -->
+  <g>
+    <path d="M475,668 a60,12 0 0,0 120,0 l0,52 a60,12 0 0,1 -120,0 z" fill="#EAF1F8" stroke="#2E6DA4" stroke-width="1.5"/>
+    <ellipse cx="535" cy="668" rx="60" ry="12" fill="#DCE8F4" stroke="#2E6DA4" stroke-width="1.5"/>
+    <text x="535" y="700" text-anchor="middle" class="chiptxt" style="font-size:12px">postgres_data</text>
+    <text x="535" y="716" text-anchor="middle" class="note">Volume</text>
+  </g>
+
+  <!-- ===================== External: TomTom ===================== -->
+  <g>
+    <rect class="extbox" x="1050" y="400" width="150" height="80" rx="10"/>
+    <text x="1062" y="430" class="btitle" style="font-size:16px">TomTom API</text>
+    <text x="1062" y="450" class="bsub">Live-Verkehr</text>
+    <text x="1062" y="468" class="note">optional · extern</text>
+  </g>
+
+  <!-- ===================== Legend ===================== -->
+  <g transform="translate(56,858)">
+    <line x1="0" y1="0" x2="34" y2="0" stroke="#2E75B6" stroke-width="1.7" marker-end="url(#aBlue)"/>
+    <text x="42" y="4" class="legtxt">HTTP / Netzwerkaufruf</text>
+    <line x1="232" y1="0" x2="266" y2="0" stroke="#8A97A4" stroke-width="1.7" stroke-dasharray="6 4" marker-end="url(#aGray)"/>
+    <text x="274" y="4" class="legtxt">optionaler externer Dienst</text>
+    <rect x="488" y="-8" width="16" height="16" rx="3" fill="#EAF1F8" stroke="#2E6DA4" stroke-width="1.5"/>
+    <text x="512" y="4" class="legtxt">persistentes Volume</text>
+    <text x="690" y="4" class="note" style="font-size:11.5px">depends_on: backend &amp; worker starten erst nach Postgres (healthy) &amp; Redis</text>
+  </g>
+</svg>
+</body>
+</html>

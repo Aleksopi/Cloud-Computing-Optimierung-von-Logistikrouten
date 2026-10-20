@@ -1,0 +1,2641 @@
+{
+  "schema": "openai.presentation.layout/v4",
+  "unit": "px",
+  "slide": {
+    "aid": "sl/o1mg4s",
+    "id": "o1mg4s",
+    "slide": 1,
+    "layoutId": "865c79ea-72b6-4cb3-8319-e5c81e3bfd6b",
+    "layoutName": "Title Slide",
+    "layoutType": "title",
+    "masterLayoutId": "0b71bd4b-6177-4272-8b7e-40c8b371b421",
+    "masterLayoutName": "Master",
+    "frame": {
+      "left": 0,
+      "top": 0,
+      "width": 1280,
+      "height": 720
+    }
+  },
+  "theme": {
+    "colorSchemeName": "ChatGPT",
+    "colors": {
+      "accent1": "#156082",
+      "accent2": "#E97132",
+      "accent3": "#196B24",
+      "accent4": "#0F9ED5",
+      "accent5": "#A02B93",
+      "accent6": "#4EA72E",
+      "bg1": "#FFFFFF",
+      "bg2": "#000000",
+      "tx1": "#1F1F1F",
+      "tx2": "#FFFFFF",
+      "dk1": "#000000",
+      "lt1": "#FFFFFF",
+      "dk2": "#0E2841",
+      "lt2": "#E8E8E8",
+      "hlink": "#467886",
+      "folHlink": "#96607D"
+    },
+    "typefaces": [
+      "Aptos",
+      "Aptos Display"
+    ]
+  },
+  "inheritedLayers": [
+    {
+      "scope": "layout",
+      "id": "865c79ea-72b6-4cb3-8319-e5c81e3bfd6b",
+      "name": "Title Slide",
+      "type": "title",
+      "parentLayoutId": "0b71bd4b-6177-4272-8b7e-40c8b371b421",
+      "elements": []
+    },
+    {
+      "scope": "master",
+      "id": "0b71bd4b-6177-4272-8b7e-40c8b371b421",
+      "name": "Master",
+      "type": "master",
+      "elements": []
+    }
+  ],
+  "elements": [
+    {
+      "order": 1,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/hwfyxobm",
+      "id": "1",
+      "bbox": [
+        0,
+        0,
+        1280,
+        720
+      ],
+      "geometry": "rect",
+      "fillColor": "#FFFFFF",
+      "lineColor": "rgba(0, 0, 0, 0)",
+      "lineWidth": 0
+    },
+    {
+      "order": 2,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/65wjudg7",
+      "id": "2",
+      "bbox": [
+        68,
+        72,
+        16,
+        16
+      ],
+      "geometry": "rect",
+      "fillColor": "#0F4C81",
+      "lineColor": "rgba(0, 0, 0, 0)",
+      "lineWidth": 0
+    },
+    {
+      "order": 3,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/zqtcj6to",
+      "id": "3",
+      "bbox": [
+        92,
+        71,
+        170,
+        18
+      ],
+      "geometry": "rect",
+      "text": "ÜBERBLICK",
+      "textPreview": "ÜBERBLICK",
+      "resolvedFontSize": 13,
+      "resolvedTextStyle": {
+        "anchor": 1,
+        "fontSize": 13,
+        "typeface": "Aptos Display",
+        "color": "#0F4C81",
+        "bold": true,
+        "alignment": "left",
+        "verticalAlignment": "top",
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "ÜBERBLICK"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "ÜBERBLICK",
+          "resolvedTextStyle": {
+            "fontSize": 13,
+            "typeface": "Aptos Display",
+            "color": "#0F4C81",
+            "bold": true,
+            "alignment": "left"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "ÜBERBLICK",
+              "fontSize": 13,
+              "typeface": "Aptos Display",
+              "color": "#0F4C81",
+              "bold": true
+            }
+          ],
+          "marginLeft": 0
+        }
+      ],
+      "fillColor": "rgba(0, 0, 0, 0)",
+      "lineColor": "rgba(0, 0, 0, 0)",
+      "lineWidth": 0
+    },
+    {
+      "order": 4,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/oza1gvy9",
+      "id": "4",
+      "bbox": [
+        68,
+        116,
+        430,
+        46
+      ],
+      "geometry": "rect",
+      "text": "Gliederung",
+      "textPreview": "Gliederung",
+      "resolvedFontSize": 38,
+      "resolvedTextStyle": {
+        "anchor": 1,
+        "fontSize": 38,
+        "typeface": "Aptos Display",
+        "color": "#1E293B",
+        "bold": true,
+        "alignment": "left",
+        "verticalAlignment": "top",
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "Gliederung"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "Gliederung",
+          "resolvedTextStyle": {
+            "fontSize": 38,
+            "typeface": "Aptos Display",
+            "color": "#1E293B",
+            "bold": true,
+            "alignment": "left"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "Gliederung",
+              "fontSize": 38,
+              "typeface": "Aptos Display",
+              "color": "#1E293B",
+              "bold": true
+            }
+          ],
+          "marginLeft": 0
+        }
+      ],
+      "fillColor": "rgba(0, 0, 0, 0)",
+      "lineColor": "rgba(0, 0, 0, 0)",
+      "lineWidth": 0
+    },
+    {
+      "order": 5,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/hk3q5o7q",
+      "id": "5",
+      "bbox": [
+        68,
+        176,
+        760,
+        42
+      ],
+      "geometry": "rect",
+      "text": "Vom Pharma-Anwendungsfall zur optimierten Route: Bedarf, Optimierung, Architektur, Ergebnis und Ausblick.",
+      "textPreview": "Vom Pharma-Anwendungsfall zur optimierten Route: Bedarf, Optimierung, Architektur, Ergebnis und Ausblick.",
+      "resolvedFontSize": 16.51,
+      "resolvedTextStyle": {
+        "anchor": 1,
+        "fontSize": 16.51,
+        "typeface": "Aptos",
+        "color": "#334155",
+        "alignment": "left",
+        "verticalAlignment": "top",
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 2,
+        "lines": [
+          {
+            "index": 1,
+            "text": "Vom Pharma-Anwendungsfall zur optimierten Route: Bedarf, Optimierung, Architektur, Ergebnis und"
+          },
+          {
+            "index": 2,
+            "text": "Ausblick."
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "Vom Pharma-Anwendungsfall zur optimierten Route: Bedarf, Optimierung, Architektur, Ergebnis und Ausblick.",
+          "resolvedTextStyle": {
+            "fontSize": 16.51,
+            "typeface": "Aptos",
+            "color": "#334155",
+            "alignment": "left"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "Vom Pharma-Anwendungsfall zur optimierten Route: Bedarf, Optimierung, Architektur, Ergebnis und Ausblick.",
+              "fontSize": 16.51,
+              "typeface": "Aptos",
+              "color": "#334155"
+            }
+          ],
+          "marginLeft": 0
+        }
+      ],
+      "fillColor": "rgba(0, 0, 0, 0)",
+      "lineColor": "rgba(0, 0, 0, 0)",
+      "lineWidth": 0
+    },
+    {
+      "order": 6,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/6xkf6dcb",
+      "id": "6",
+      "bbox": [
+        936,
+        114,
+        280,
+        100
+      ],
+      "geometry": "roundRect",
+      "fillColor": "#D7E0EA",
+      "lineColor": "rgba(0, 0, 0, 0)",
+      "lineWidth": 0
+    },
+    {
+      "order": 7,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/zed8v6ps",
+      "id": "7",
+      "bbox": [
+        932,
+        108,
+        280,
+        100
+      ],
+      "geometry": "roundRect",
+      "fillColor": "#EAFBF7",
+      "lineColor": "#A7E2DB",
+      "lineWidth": 1
+    },
+    {
+      "order": 8,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/orytsvu9",
+      "id": "8",
+      "bbox": [
+        932,
+        108,
+        8,
+        100
+      ],
+      "geometry": "rect",
+      "fillColor": "#0D9488",
+      "lineColor": "rgba(0, 0, 0, 0)",
+      "lineWidth": 0
+    },
+    {
+      "order": 9,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/hcrmhk3q",
+      "id": "9",
+      "bbox": [
+        956,
+        126,
+        110,
+        18
+      ],
+      "geometry": "rect",
+      "text": "Leitfrage",
+      "textPreview": "Leitfrage",
+      "resolvedFontSize": 14,
+      "resolvedTextStyle": {
+        "anchor": 1,
+        "fontSize": 14,
+        "typeface": "Aptos Display",
+        "color": "#0D9488",
+        "bold": true,
+        "alignment": "left",
+        "verticalAlignment": "top",
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "Leitfrage"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "Leitfrage",
+          "resolvedTextStyle": {
+            "fontSize": 14,
+            "typeface": "Aptos Display",
+            "color": "#0D9488",
+            "bold": true,
+            "alignment": "left"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "Leitfrage",
+              "fontSize": 14,
+              "typeface": "Aptos Display",
+              "color": "#0D9488",
+              "bold": true
+            }
+          ],
+          "marginLeft": 0
+        }
+      ],
+      "fillColor": "rgba(0, 0, 0, 0)",
+      "lineColor": "rgba(0, 0, 0, 0)",
+      "lineWidth": 0
+    },
+    {
+      "order": 10,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/d4vmtwra",
+      "id": "10",
+      "bbox": [
+        956,
+        151,
+        224,
+        36
+      ],
+      "geometry": "rect",
+      "text": "Wie lassen sich Apotheken in der Schweiz effizient, pünktlich und CO₂-bewusst beliefern?",
+      "textPreview": "Wie lassen sich Apotheken in der Schweiz effizient, pünktlich und CO₂-bewusst beliefern?",
+      "resolvedFontSize": 12.09,
+      "resolvedTextStyle": {
+        "anchor": 1,
+        "fontSize": 12.09,
+        "typeface": "Aptos",
+        "color": "#1E293B",
+        "alignment": "left",
+        "verticalAlignment": "top",
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 3,
+        "lines": [
+          {
+            "index": 1,
+            "text": "Wie lassen sich Apotheken in der"
+          },
+          {
+            "index": 2,
+            "text": "Schweiz effizient, pünktlich und"
+          },
+          {
+            "index": 3,
+            "text": "CO₂-bewusst beliefern?"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "Wie lassen sich Apotheken in der Schweiz effizient, pünktlich und CO₂-bewusst beliefern?",
+          "resolvedTextStyle": {
+            "fontSize": 12.09,
+            "typeface": "Aptos",
+            "color": "#1E293B",
+            "alignment": "left"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "Wie lassen sich Apotheken in der Schweiz effizient, pünktlich und CO₂-bewusst beliefern?",
+              "fontSize": 12.09,
+              "typeface": "Aptos",
+              "color": "#1E293B"
+            }
+          ],
+          "marginLeft": 0
+        }
+      ],
+      "fillColor": "rgba(0, 0, 0, 0)",
+      "lineColor": "rgba(0, 0, 0, 0)",
+      "lineWidth": 0
+    },
+    {
+      "order": 11,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/oj2t83it",
+      "id": "11",
+      "bbox": [
+        435,
+        314,
+        6,
+        2.5
+      ],
+      "rotation": 180,
+      "geometry": "roundRect",
+      "fillColor": "#A7B4C3",
+      "lineColor": "rgba(0, 0, 0, 0)",
+      "lineWidth": 0
+    },
+    {
+      "order": 12,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/vy90je9c",
+      "id": "12",
+      "bbox": [
+        819,
+        314,
+        6,
+        2.5
+      ],
+      "rotation": 180,
+      "geometry": "roundRect",
+      "fillColor": "#A7B4C3",
+      "lineColor": "rgba(0, 0, 0, 0)",
+      "lineWidth": 0
+    },
+    {
+      "order": 13,
+      "kind": "image",
+      "scope": "slide",
+      "aid": "im/9s36hcrm",
+      "id": "13",
+      "bbox": [
+        409,
+        302,
+        24,
+        24
+      ],
+      "alt": "ArrowRight icon",
+      "contentType": "image/svg+xml",
+      "imageFit": "contain",
+      "asset": {
+        "assetId": "b8b37844-60c4-4f5f-be4d-16fa503d450b",
+        "contentType": "image/svg+xml",
+        "byteLength": 229
+      }
+    },
+    {
+      "order": 14,
+      "kind": "image",
+      "scope": "slide",
+      "aid": "im/yd0z6103",
+      "id": "14",
+      "bbox": [
+        793,
+        302,
+        24,
+        24
+      ],
+      "alt": "ArrowRight icon",
+      "contentType": "image/svg+xml",
+      "imageFit": "contain",
+      "asset": {
+        "assetId": "1c31bbd1-0ba0-426b-895e-0f7dee00e700",
+        "contentType": "image/svg+xml",
+        "byteLength": 229
+      }
+    },
+    {
+      "order": 15,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/o7qpg3ex",
+      "id": "15",
+      "bbox": [
+        1014,
+        374,
+        40,
+        2.5
+      ],
+      "rotation": 90,
+      "geometry": "roundRect",
+      "fillColor": "#A7B4C3",
+      "lineColor": "rgba(0, 0, 0, 0)",
+      "lineWidth": 0
+    },
+    {
+      "order": 16,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/vmtwra5g",
+      "id": "16",
+      "bbox": [
+        1014,
+        414,
+        768,
+        2.5
+      ],
+      "rotation": 180,
+      "geometry": "roundRect",
+      "fillColor": "#A7B4C3",
+      "lineColor": "rgba(0, 0, 0, 0)",
+      "lineWidth": 0
+    },
+    {
+      "order": 17,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/61032lsz",
+      "id": "17",
+      "bbox": [
+        246,
+        414,
+        22,
+        2.5
+      ],
+      "rotation": 90,
+      "geometry": "roundRect",
+      "fillColor": "#A7B4C3",
+      "lineColor": "rgba(0, 0, 0, 0)",
+      "lineWidth": 0
+    },
+    {
+      "order": 18,
+      "kind": "image",
+      "scope": "slide",
+      "aid": "im/ylc7u54z",
+      "id": "18",
+      "bbox": [
+        234,
+        414,
+        24,
+        24
+      ],
+      "alt": "ArrowDown icon",
+      "contentType": "image/svg+xml",
+      "imageFit": "contain",
+      "asset": {
+        "assetId": "42d368e3-d8cd-45e5-a021-69ed998db906",
+        "contentType": "image/svg+xml",
+        "byteLength": 230
+      }
+    },
+    {
+      "order": 19,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/ovahoza1",
+      "id": "19",
+      "bbox": [
+        435,
+        496,
+        6,
+        2.5
+      ],
+      "rotation": 180,
+      "geometry": "roundRect",
+      "fillColor": "#A7B4C3",
+      "lineColor": "rgba(0, 0, 0, 0)",
+      "lineWidth": 0
+    },
+    {
+      "order": 20,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/k3q5o7qp",
+      "id": "20",
+      "bbox": [
+        819,
+        496,
+        6,
+        2.5
+      ],
+      "rotation": 180,
+      "geometry": "roundRect",
+      "fillColor": "#A7B4C3",
+      "lineColor": "rgba(0, 0, 0, 0)",
+      "lineWidth": 0
+    },
+    {
+      "order": 21,
+      "kind": "image",
+      "scope": "slide",
+      "aid": "im/qpg3ex0n",
+      "id": "21",
+      "bbox": [
+        409,
+        484,
+        24,
+        24
+      ],
+      "alt": "ArrowRight icon",
+      "contentType": "image/svg+xml",
+      "imageFit": "contain",
+      "asset": {
+        "assetId": "deb8f2a5-71c4-4d12-8ea2-d1a20c4210ae",
+        "contentType": "image/svg+xml",
+        "byteLength": 229
+      }
+    },
+    {
+      "order": 22,
+      "kind": "image",
+      "scope": "slide",
+      "aid": "im/xczed8v6",
+      "id": "22",
+      "bbox": [
+        793,
+        484,
+        24,
+        24
+      ],
+      "alt": "ArrowRight icon",
+      "contentType": "image/svg+xml",
+      "imageFit": "contain",
+      "asset": {
+        "assetId": "61c03778-80c0-4c02-880e-436e65ea1a1c",
+        "contentType": "image/svg+xml",
+        "byteLength": 229
+      }
+    },
+    {
+      "order": 23,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/vixczed8",
+      "id": "23",
+      "bbox": [
+        72,
+        268,
+        356,
+        104
+      ],
+      "geometry": "roundRect",
+      "fillColor": "#D7E0EA",
+      "lineColor": "rgba(0, 0, 0, 0)",
+      "lineWidth": 0
+    },
+    {
+      "order": 24,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/kre1w7mp",
+      "id": "24",
+      "bbox": [
+        68,
+        262,
+        356,
+        104
+      ],
+      "geometry": "roundRect",
+      "fillColor": "#EAF3FA",
+      "lineColor": "#E2E8F0",
+      "lineWidth": 1
+    },
+    {
+      "order": 25,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/dcbulwva",
+      "id": "25",
+      "bbox": [
+        68,
+        262,
+        7,
+        104
+      ],
+      "geometry": "rect",
+      "fillColor": "#0F4C81",
+      "lineColor": "rgba(0, 0, 0, 0)",
+      "lineWidth": 0
+    },
+    {
+      "order": 26,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/6psfil0r",
+      "id": "26",
+      "bbox": [
+        90,
+        284,
+        38,
+        38
+      ],
+      "geometry": "ellipse",
+      "fillColor": "#0F4C81",
+      "lineColor": "rgba(0, 0, 0, 0)",
+      "lineWidth": 0
+    },
+    {
+      "order": 27,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/val87ed8",
+      "id": "27",
+      "bbox": [
+        90,
+        289,
+        38,
+        20
+      ],
+      "geometry": "rect",
+      "text": "1",
+      "textPreview": "1",
+      "resolvedFontSize": 14.51,
+      "resolvedTextStyle": {
+        "anchor": 2,
+        "fontSize": 14.51,
+        "typeface": "Aptos Display",
+        "color": "#FFFFFF",
+        "bold": true,
+        "alignment": "center",
+        "verticalAlignment": "middle",
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "1"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "1",
+          "resolvedTextStyle": {
+            "fontSize": 14.51,
+            "typeface": "Aptos Display",
+            "color": "#FFFFFF",
+            "bold": true,
+            "alignment": "center"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "1",
+              "fontSize": 14.51,
+              "typeface": "Aptos Display",
+              "color": "#FFFFFF",
+              "bold": true
+            }
+          ],
+          "marginLeft": 0
+        }
+      ],
+      "fillColor": "rgba(0, 0, 0, 0)",
+      "lineColor": "rgba(0, 0, 0, 0)",
+      "lineWidth": 0
+    },
+    {
+      "order": 28,
+      "kind": "image",
+      "scope": "slide",
+      "aid": "im/fmlkjm1c",
+      "id": "28",
+      "bbox": [
+        376,
+        286,
+        25,
+        25
+      ],
+      "alt": "MapPinned icon",
+      "contentType": "image/svg+xml",
+      "imageFit": "contain",
+      "asset": {
+        "assetId": "8e9ebe27-71ce-4ece-be84-123b06689733",
+        "contentType": "image/svg+xml",
+        "byteLength": 447
+      }
+    },
+    {
+      "order": 29,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/d8bat47y",
+      "id": "29",
+      "bbox": [
+        144,
+        282,
+        226,
+        20
+      ],
+      "geometry": "rect",
+      "text": "Anwendungsfall & Ziel",
+      "textPreview": "Anwendungsfall & Ziel",
+      "resolvedFontSize": 15.6,
+      "resolvedTextStyle": {
+        "anchor": 1,
+        "fontSize": 15.6,
+        "typeface": "Aptos Display",
+        "color": "#1E293B",
+        "bold": true,
+        "alignment": "left",
+        "verticalAlignment": "top",
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "Anwendungsfall & Ziel"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "Anwendungsfall & Ziel",
+          "resolvedTextStyle": {
+            "fontSize": 15.6,
+            "typeface": "Aptos Display",
+            "color": "#1E293B",
+            "bold": true,
+            "alignment": "left"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "Anwendungsfall & Ziel",
+              "fontSize": 15.6,
+              "typeface": "Aptos Display",
+              "color": "#1E293B",
+              "bold": true
+            }
+          ],
+          "marginLeft": 0
+        }
+      ],
+      "fillColor": "rgba(0, 0, 0, 0)",
+      "lineColor": "rgba(0, 0, 0, 0)",
+      "lineWidth": 0
+    },
+    {
+      "order": 30,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/za1gvy90",
+      "id": "30",
+      "bbox": [
+        144,
+        310,
+        256,
+        36
+      ],
+      "geometry": "rect",
+      "text": "Pharma-Distribution, Apothekenfokus und Optimierungsziel.",
+      "textPreview": "Pharma-Distribution, Apothekenfokus und Optimierungsziel.",
+      "resolvedFontSize": 11.2,
+      "resolvedTextStyle": {
+        "anchor": 1,
+        "fontSize": 11.2,
+        "typeface": "Aptos",
+        "color": "#334155",
+        "alignment": "left",
+        "verticalAlignment": "top",
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 2,
+        "lines": [
+          {
+            "index": 1,
+            "text": "Pharma-Distribution, Apothekenfokus und"
+          },
+          {
+            "index": 2,
+            "text": "Optimierungsziel."
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "Pharma-Distribution, Apothekenfokus und Optimierungsziel.",
+          "resolvedTextStyle": {
+            "fontSize": 11.2,
+            "typeface": "Aptos",
+            "color": "#334155",
+            "alignment": "left"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "Pharma-Distribution, Apothekenfokus und Optimierungsziel.",
+              "fontSize": 11.2,
+              "typeface": "Aptos",
+              "color": "#334155"
+            }
+          ],
+          "marginLeft": 0
+        }
+      ],
+      "fillColor": "rgba(0, 0, 0, 0)",
+      "lineColor": "rgba(0, 0, 0, 0)",
+      "lineWidth": 0
+    },
+    {
+      "order": 31,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/ap4r65wj",
+      "id": "31",
+      "bbox": [
+        456,
+        268,
+        356,
+        104
+      ],
+      "geometry": "roundRect",
+      "fillColor": "#D7E0EA",
+      "lineColor": "rgba(0, 0, 0, 0)",
+      "lineWidth": 0
+    },
+    {
+      "order": 32,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/hgn29gr2",
+      "id": "32",
+      "bbox": [
+        452,
+        262,
+        356,
+        104
+      ],
+      "geometry": "roundRect",
+      "fillColor": "#ECFBF8",
+      "lineColor": "#E2E8F0",
+      "lineWidth": 1
+    },
+    {
+      "order": 33,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/svu9knih",
+      "id": "33",
+      "bbox": [
+        452,
+        262,
+        7,
+        104
+      ],
+      "geometry": "rect",
+      "fillColor": "#0D9488",
+      "lineColor": "rgba(0, 0, 0, 0)",
+      "lineWidth": 0
+    },
+    {
+      "order": 34,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/zidonyd0",
+      "id": "34",
+      "bbox": [
+        474,
+        284,
+        38,
+        38
+      ],
+      "geometry": "ellipse",
+      "fillColor": "#0D9488",
+      "lineColor": "rgba(0, 0, 0, 0)",
+      "lineWidth": 0
+    },
+    {
+      "order": 35,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/a1gvy90j",
+      "id": "35",
+      "bbox": [
+        474,
+        289,
+        38,
+        20
+      ],
+      "geometry": "rect",
+      "text": "2",
+      "textPreview": "2",
+      "resolvedFontSize": 14.51,
+      "resolvedTextStyle": {
+        "anchor": 2,
+        "fontSize": 14.51,
+        "typeface": "Aptos Display",
+        "color": "#FFFFFF",
+        "bold": true,
+        "alignment": "center",
+        "verticalAlignment": "middle",
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "2"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "2",
+          "resolvedTextStyle": {
+            "fontSize": 14.51,
+            "typeface": "Aptos Display",
+            "color": "#FFFFFF",
+            "bold": true,
+            "alignment": "center"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "2",
+              "fontSize": 14.51,
+              "typeface": "Aptos Display",
+              "color": "#FFFFFF",
+              "bold": true
+            }
+          ],
+          "marginLeft": 0
+        }
+      ],
+      "fillColor": "rgba(0, 0, 0, 0)",
+      "lineColor": "rgba(0, 0, 0, 0)",
+      "lineWidth": 0
+    },
+    {
+      "order": 36,
+      "kind": "image",
+      "scope": "slide",
+      "aid": "im/2p8nqxs7",
+      "id": "36",
+      "bbox": [
+        760,
+        286,
+        25,
+        25
+      ],
+      "alt": "Database icon",
+      "contentType": "image/svg+xml",
+      "imageFit": "contain",
+      "asset": {
+        "assetId": "a4433986-64ef-4847-9a67-85563c6fc151",
+        "contentType": "image/svg+xml",
+        "byteLength": 293
+      }
+    },
+    {
+      "order": 37,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/s36hcrmh",
+      "id": "37",
+      "bbox": [
+        528,
+        282,
+        226,
+        20
+      ],
+      "geometry": "rect",
+      "text": "Datenbasis & Bedarf",
+      "textPreview": "Datenbasis & Bedarf",
+      "resolvedFontSize": 15.6,
+      "resolvedTextStyle": {
+        "anchor": 1,
+        "fontSize": 15.6,
+        "typeface": "Aptos Display",
+        "color": "#1E293B",
+        "bold": true,
+        "alignment": "left",
+        "verticalAlignment": "top",
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "Datenbasis & Bedarf"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "Datenbasis & Bedarf",
+          "resolvedTextStyle": {
+            "fontSize": 15.6,
+            "typeface": "Aptos Display",
+            "color": "#1E293B",
+            "bold": true,
+            "alignment": "left"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "Datenbasis & Bedarf",
+              "fontSize": 15.6,
+              "typeface": "Aptos Display",
+              "color": "#1E293B",
+              "bold": true
+            }
+          ],
+          "marginLeft": 0
+        }
+      ],
+      "fillColor": "rgba(0, 0, 0, 0)",
+      "lineColor": "rgba(0, 0, 0, 0)",
+      "lineWidth": 0
+    },
+    {
+      "order": 38,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/3m94fu18",
+      "id": "38",
+      "bbox": [
+        528,
+        310,
+        256,
+        36
+      ],
+      "geometry": "rect",
+      "text": "Apotheken, Bevölkerung, Nachfrage und reale Straßendaten.",
+      "textPreview": "Apotheken, Bevölkerung, Nachfrage und reale Straßendaten.",
+      "resolvedFontSize": 11.2,
+      "resolvedTextStyle": {
+        "anchor": 1,
+        "fontSize": 11.2,
+        "typeface": "Aptos",
+        "color": "#334155",
+        "alignment": "left",
+        "verticalAlignment": "top",
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 2,
+        "lines": [
+          {
+            "index": 1,
+            "text": "Apotheken, Bevölkerung, Nachfrage und reale"
+          },
+          {
+            "index": 2,
+            "text": "Straßendaten."
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "Apotheken, Bevölkerung, Nachfrage und reale Straßendaten.",
+          "resolvedTextStyle": {
+            "fontSize": 11.2,
+            "typeface": "Aptos",
+            "color": "#334155",
+            "alignment": "left"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "Apotheken, Bevölkerung, Nachfrage und reale Straßendaten.",
+              "fontSize": 11.2,
+              "typeface": "Aptos",
+              "color": "#334155"
+            }
+          ],
+          "marginLeft": 0
+        }
+      ],
+      "fillColor": "rgba(0, 0, 0, 0)",
+      "lineColor": "rgba(0, 0, 0, 0)",
+      "lineWidth": 0
+    },
+    {
+      "order": 39,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/a5gbq1or",
+      "id": "39",
+      "bbox": [
+        840,
+        268,
+        356,
+        104
+      ],
+      "geometry": "roundRect",
+      "fillColor": "#D7E0EA",
+      "lineColor": "rgba(0, 0, 0, 0)",
+      "lineWidth": 0
+    },
+    {
+      "order": 40,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/qtcj6tov",
+      "id": "40",
+      "bbox": [
+        836,
+        262,
+        356,
+        104
+      ],
+      "geometry": "roundRect",
+      "fillColor": "#FFF7E8",
+      "lineColor": "#E2E8F0",
+      "lineWidth": 1
+    },
+    {
+      "order": 41,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/je9cvixc",
+      "id": "41",
+      "bbox": [
+        836,
+        262,
+        7,
+        104
+      ],
+      "geometry": "rect",
+      "fillColor": "#D97706",
+      "lineColor": "rgba(0, 0, 0, 0)",
+      "lineWidth": 0
+    },
+    {
+      "order": 42,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/8z25kb6x",
+      "id": "42",
+      "bbox": [
+        858,
+        284,
+        38,
+        38
+      ],
+      "geometry": "ellipse",
+      "fillColor": "#D97706",
+      "lineColor": "rgba(0, 0, 0, 0)",
+      "lineWidth": 0
+    },
+    {
+      "order": 43,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/1gvy90je",
+      "id": "43",
+      "bbox": [
+        858,
+        289,
+        38,
+        20
+      ],
+      "geometry": "rect",
+      "text": "3",
+      "textPreview": "3",
+      "resolvedFontSize": 14.51,
+      "resolvedTextStyle": {
+        "anchor": 2,
+        "fontSize": 14.51,
+        "typeface": "Aptos Display",
+        "color": "#FFFFFF",
+        "bold": true,
+        "alignment": "center",
+        "verticalAlignment": "middle",
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "3"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "3",
+          "resolvedTextStyle": {
+            "fontSize": 14.51,
+            "typeface": "Aptos Display",
+            "color": "#FFFFFF",
+            "bold": true,
+            "alignment": "center"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "3",
+              "fontSize": 14.51,
+              "typeface": "Aptos Display",
+              "color": "#FFFFFF",
+              "bold": true
+            }
+          ],
+          "marginLeft": 0
+        }
+      ],
+      "fillColor": "rgba(0, 0, 0, 0)",
+      "lineColor": "rgba(0, 0, 0, 0)",
+      "lineWidth": 0
+    },
+    {
+      "order": 44,
+      "kind": "image",
+      "scope": "slide",
+      "aid": "im/l0rqd4vm",
+      "id": "44",
+      "bbox": [
+        1144,
+        286,
+        25,
+        25
+      ],
+      "alt": "GitBranch icon",
+      "contentType": "image/svg+xml",
+      "imageFit": "contain",
+      "asset": {
+        "assetId": "df87f8ea-88c0-4c01-a88d-f09340db7920",
+        "contentType": "image/svg+xml",
+        "byteLength": 277
+      }
+    },
+    {
+      "order": 45,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/fmlkjm1c",
+      "id": "45",
+      "bbox": [
+        912,
+        282,
+        226,
+        20
+      ],
+      "geometry": "rect",
+      "text": "Optimierungs-Pipeline",
+      "textPreview": "Optimierungs-Pipeline",
+      "resolvedFontSize": 15.6,
+      "resolvedTextStyle": {
+        "anchor": 1,
+        "fontSize": 15.6,
+        "typeface": "Aptos Display",
+        "color": "#1E293B",
+        "bold": true,
+        "alignment": "left",
+        "verticalAlignment": "top",
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "Optimierungs-Pipeline"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "Optimierungs-Pipeline",
+          "resolvedTextStyle": {
+            "fontSize": 15.6,
+            "typeface": "Aptos Display",
+            "color": "#1E293B",
+            "bold": true,
+            "alignment": "left"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "Optimierungs-Pipeline",
+              "fontSize": 15.6,
+              "typeface": "Aptos Display",
+              "color": "#1E293B",
+              "bold": true
+            }
+          ],
+          "marginLeft": 0
+        }
+      ],
+      "fillColor": "rgba(0, 0, 0, 0)",
+      "lineColor": "rgba(0, 0, 0, 0)",
+      "lineWidth": 0
+    },
+    {
+      "order": 46,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/87ed8bat",
+      "id": "46",
+      "bbox": [
+        912,
+        310,
+        256,
+        36
+      ],
+      "geometry": "rect",
+      "text": "Bedarf, Hub-Placement, Einzugsgebiete und Routen.",
+      "textPreview": "Bedarf, Hub-Placement, Einzugsgebiete und Routen.",
+      "resolvedFontSize": 11.2,
+      "resolvedTextStyle": {
+        "anchor": 1,
+        "fontSize": 11.2,
+        "typeface": "Aptos",
+        "color": "#334155",
+        "alignment": "left",
+        "verticalAlignment": "top",
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 2,
+        "lines": [
+          {
+            "index": 1,
+            "text": "Bedarf, Hub-Placement, Einzugsgebiete und"
+          },
+          {
+            "index": 2,
+            "text": "Routen."
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "Bedarf, Hub-Placement, Einzugsgebiete und Routen.",
+          "resolvedTextStyle": {
+            "fontSize": 11.2,
+            "typeface": "Aptos",
+            "color": "#334155",
+            "alignment": "left"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "Bedarf, Hub-Placement, Einzugsgebiete und Routen.",
+              "fontSize": 11.2,
+              "typeface": "Aptos",
+              "color": "#334155"
+            }
+          ],
+          "marginLeft": 0
+        }
+      ],
+      "fillColor": "rgba(0, 0, 0, 0)",
+      "lineColor": "rgba(0, 0, 0, 0)",
+      "lineWidth": 0
+    },
+    {
+      "order": 47,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/xs72x4na",
+      "id": "47",
+      "bbox": [
+        72,
+        450,
+        356,
+        104
+      ],
+      "geometry": "roundRect",
+      "fillColor": "#D7E0EA",
+      "lineColor": "rgba(0, 0, 0, 0)",
+      "lineWidth": 0
+    },
+    {
+      "order": 48,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/qd4vmtwr",
+      "id": "48",
+      "bbox": [
+        68,
+        444,
+        356,
+        104
+      ],
+      "geometry": "roundRect",
+      "fillColor": "#EEFBEF",
+      "lineColor": "#E2E8F0",
+      "lineWidth": 1
+    },
+    {
+      "order": 49,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/fyxobm58",
+      "id": "49",
+      "bbox": [
+        68,
+        444,
+        7,
+        104
+      ],
+      "geometry": "rect",
+      "fillColor": "#16A34A",
+      "lineColor": "rgba(0, 0, 0, 0)",
+      "lineWidth": 0
+    },
+    {
+      "order": 50,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/5wjudg7a",
+      "id": "50",
+      "bbox": [
+        90,
+        466,
+        38,
+        38
+      ],
+      "geometry": "ellipse",
+      "fillColor": "#16A34A",
+      "lineColor": "rgba(0, 0, 0, 0)",
+      "lineWidth": 0
+    },
+    {
+      "order": 51,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/gbq1oryt",
+      "id": "51",
+      "bbox": [
+        90,
+        471,
+        38,
+        20
+      ],
+      "geometry": "rect",
+      "text": "4",
+      "textPreview": "4",
+      "resolvedFontSize": 14.51,
+      "resolvedTextStyle": {
+        "anchor": 2,
+        "fontSize": 14.51,
+        "typeface": "Aptos Display",
+        "color": "#FFFFFF",
+        "bold": true,
+        "alignment": "center",
+        "verticalAlignment": "middle",
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "4"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "4",
+          "resolvedTextStyle": {
+            "fontSize": 14.51,
+            "typeface": "Aptos Display",
+            "color": "#FFFFFF",
+            "bold": true,
+            "alignment": "center"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "4",
+              "fontSize": 14.51,
+              "typeface": "Aptos Display",
+              "color": "#FFFFFF",
+              "bold": true
+            }
+          ],
+          "marginLeft": 0
+        }
+      ],
+      "fillColor": "rgba(0, 0, 0, 0)",
+      "lineColor": "rgba(0, 0, 0, 0)",
+      "lineWidth": 0
+    },
+    {
+      "order": 52,
+      "kind": "image",
+      "scope": "slide",
+      "aid": "im/obm58z25",
+      "id": "52",
+      "bbox": [
+        376,
+        468,
+        25,
+        25
+      ],
+      "alt": "Route icon",
+      "contentType": "image/svg+xml",
+      "imageFit": "contain",
+      "asset": {
+        "assetId": "e401cece-1623-4a89-ad3c-d20b39995a95",
+        "contentType": "image/svg+xml",
+        "byteLength": 308
+      }
+    },
+    {
+      "order": 53,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/y90je9cv",
+      "id": "53",
+      "bbox": [
+        144,
+        464,
+        226,
+        20
+      ],
+      "geometry": "rect",
+      "text": "Routenberechnung",
+      "textPreview": "Routenberechnung",
+      "resolvedFontSize": 15.6,
+      "resolvedTextStyle": {
+        "anchor": 1,
+        "fontSize": 15.6,
+        "typeface": "Aptos Display",
+        "color": "#1E293B",
+        "bold": true,
+        "alignment": "left",
+        "verticalAlignment": "top",
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "Routenberechnung"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "Routenberechnung",
+          "resolvedTextStyle": {
+            "fontSize": 15.6,
+            "typeface": "Aptos Display",
+            "color": "#1E293B",
+            "bold": true,
+            "alignment": "left"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "Routenberechnung",
+              "fontSize": 15.6,
+              "typeface": "Aptos Display",
+              "color": "#1E293B",
+              "bold": true
+            }
+          ],
+          "marginLeft": 0
+        }
+      ],
+      "fillColor": "rgba(0, 0, 0, 0)",
+      "lineColor": "rgba(0, 0, 0, 0)",
+      "lineWidth": 0
+    },
+    {
+      "order": 54,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/58z25kb6",
+      "id": "54",
+      "bbox": [
+        144,
+        492,
+        256,
+        36
+      ],
+      "geometry": "rect",
+      "text": "OSRM, Live Traffic, Fahrzeugauswahl, Kosten, Zeit und CO₂.",
+      "textPreview": "OSRM, Live Traffic, Fahrzeugauswahl, Kosten, Zeit und CO₂.",
+      "resolvedFontSize": 11.2,
+      "resolvedTextStyle": {
+        "anchor": 1,
+        "fontSize": 11.2,
+        "typeface": "Aptos",
+        "color": "#334155",
+        "alignment": "left",
+        "verticalAlignment": "top",
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 2,
+        "lines": [
+          {
+            "index": 1,
+            "text": "OSRM, Live Traffic, Fahrzeugauswahl, Kosten, Zeit"
+          },
+          {
+            "index": 2,
+            "text": "und CO₂."
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "OSRM, Live Traffic, Fahrzeugauswahl, Kosten, Zeit und CO₂.",
+          "resolvedTextStyle": {
+            "fontSize": 11.2,
+            "typeface": "Aptos",
+            "color": "#334155",
+            "alignment": "left"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "OSRM, Live Traffic, Fahrzeugauswahl, Kosten, Zeit und CO₂.",
+              "fontSize": 11.2,
+              "typeface": "Aptos",
+              "color": "#334155"
+            }
+          ],
+          "marginLeft": 0
+        }
+      ],
+      "fillColor": "rgba(0, 0, 0, 0)",
+      "lineColor": "rgba(0, 0, 0, 0)",
+      "lineWidth": 0
+    },
+    {
+      "order": 55,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/gn29gr2p",
+      "id": "55",
+      "bbox": [
+        456,
+        450,
+        356,
+        104
+      ],
+      "geometry": "roundRect",
+      "fillColor": "#D7E0EA",
+      "lineColor": "rgba(0, 0, 0, 0)",
+      "lineWidth": 0
+    },
+    {
+      "order": 56,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/n29gr2p8",
+      "id": "56",
+      "bbox": [
+        452,
+        444,
+        356,
+        104
+      ],
+      "geometry": "roundRect",
+      "fillColor": "#F3ECFF",
+      "lineColor": "#E2E8F0",
+      "lineWidth": 1
+    },
+    {
+      "order": 57,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/yhgn29gr",
+      "id": "57",
+      "bbox": [
+        452,
+        444,
+        7,
+        104
+      ],
+      "geometry": "rect",
+      "fillColor": "#6D28D9",
+      "lineColor": "rgba(0, 0, 0, 0)",
+      "lineWidth": 0
+    },
+    {
+      "order": 58,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/5kb6xkf6",
+      "id": "58",
+      "bbox": [
+        474,
+        466,
+        38,
+        38
+      ],
+      "geometry": "ellipse",
+      "fillColor": "#6D28D9",
+      "lineColor": "rgba(0, 0, 0, 0)",
+      "lineWidth": 0
+    },
+    {
+      "order": 59,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/czed8v6p",
+      "id": "59",
+      "bbox": [
+        474,
+        471,
+        38,
+        20
+      ],
+      "geometry": "rect",
+      "text": "5",
+      "textPreview": "5",
+      "resolvedFontSize": 14.51,
+      "resolvedTextStyle": {
+        "anchor": 2,
+        "fontSize": 14.51,
+        "typeface": "Aptos Display",
+        "color": "#FFFFFF",
+        "bold": true,
+        "alignment": "center",
+        "verticalAlignment": "middle",
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "5"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "5",
+          "resolvedTextStyle": {
+            "fontSize": 14.51,
+            "typeface": "Aptos Display",
+            "color": "#FFFFFF",
+            "bold": true,
+            "alignment": "center"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "5",
+              "fontSize": 14.51,
+              "typeface": "Aptos Display",
+              "color": "#FFFFFF",
+              "bold": true
+            }
+          ],
+          "marginLeft": 0
+        }
+      ],
+      "fillColor": "rgba(0, 0, 0, 0)",
+      "lineColor": "rgba(0, 0, 0, 0)",
+      "lineWidth": 0
+    },
+    {
+      "order": 60,
+      "kind": "image",
+      "scope": "slide",
+      "aid": "im/bi9s36hc",
+      "id": "60",
+      "bbox": [
+        760,
+        468,
+        25,
+        25
+      ],
+      "alt": "Network icon",
+      "contentType": "image/svg+xml",
+      "imageFit": "contain",
+      "asset": {
+        "assetId": "c60ad888-e626-4539-a2d7-746b3312d5aa",
+        "contentType": "image/svg+xml",
+        "byteLength": 401
+      }
+    },
+    {
+      "order": 61,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/1w7mp0bi",
+      "id": "61",
+      "bbox": [
+        528,
+        464,
+        226,
+        20
+      ],
+      "geometry": "rect",
+      "text": "Systemarchitektur",
+      "textPreview": "Systemarchitektur",
+      "resolvedFontSize": 15.6,
+      "resolvedTextStyle": {
+        "anchor": 1,
+        "fontSize": 15.6,
+        "typeface": "Aptos Display",
+        "color": "#1E293B",
+        "bold": true,
+        "alignment": "left",
+        "verticalAlignment": "top",
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "Systemarchitektur"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "Systemarchitektur",
+          "resolvedTextStyle": {
+            "fontSize": 15.6,
+            "typeface": "Aptos Display",
+            "color": "#1E293B",
+            "bold": true,
+            "alignment": "left"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "Systemarchitektur",
+              "fontSize": 15.6,
+              "typeface": "Aptos Display",
+              "color": "#1E293B",
+              "bold": true
+            }
+          ],
+          "marginLeft": 0
+        }
+      ],
+      "fillColor": "rgba(0, 0, 0, 0)",
+      "lineColor": "rgba(0, 0, 0, 0)",
+      "lineWidth": 0
+    },
+    {
+      "order": 62,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/q5o7qpg3",
+      "id": "62",
+      "bbox": [
+        528,
+        492,
+        256,
+        36
+      ],
+      "geometry": "rect",
+      "text": "Docker-Compose, nginx, FastAPI, Celery, Redis, PostGIS und OSRM.",
+      "textPreview": "Docker-Compose, nginx, FastAPI, Celery, Redis, PostGIS und OSRM.",
+      "resolvedFontSize": 11.2,
+      "resolvedTextStyle": {
+        "anchor": 1,
+        "fontSize": 11.2,
+        "typeface": "Aptos",
+        "color": "#334155",
+        "alignment": "left",
+        "verticalAlignment": "top",
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 2,
+        "lines": [
+          {
+            "index": 1,
+            "text": "Docker-Compose, nginx, FastAPI, Celery, Redis,"
+          },
+          {
+            "index": 2,
+            "text": "PostGIS und OSRM."
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "Docker-Compose, nginx, FastAPI, Celery, Redis, PostGIS und OSRM.",
+          "resolvedTextStyle": {
+            "fontSize": 11.2,
+            "typeface": "Aptos",
+            "color": "#334155",
+            "alignment": "left"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "Docker-Compose, nginx, FastAPI, Celery, Redis, PostGIS und OSRM.",
+              "fontSize": 11.2,
+              "typeface": "Aptos",
+              "color": "#334155"
+            }
+          ],
+          "marginLeft": 0
+        }
+      ],
+      "fillColor": "rgba(0, 0, 0, 0)",
+      "lineColor": "rgba(0, 0, 0, 0)",
+      "lineWidth": 0
+    },
+    {
+      "order": 63,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/jqh0fepk",
+      "id": "63",
+      "bbox": [
+        840,
+        450,
+        356,
+        104
+      ],
+      "geometry": "roundRect",
+      "fillColor": "#D7E0EA",
+      "lineColor": "rgba(0, 0, 0, 0)",
+      "lineWidth": 0
+    },
+    {
+      "order": 64,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/8nqxs72x",
+      "id": "64",
+      "bbox": [
+        836,
+        444,
+        356,
+        104
+      ],
+      "geometry": "roundRect",
+      "fillColor": "#F7FAFC",
+      "lineColor": "#E2E8F0",
+      "lineWidth": 1
+    },
+    {
+      "order": 65,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/18jqh0fe",
+      "id": "65",
+      "bbox": [
+        836,
+        444,
+        7,
+        104
+      ],
+      "geometry": "rect",
+      "fillColor": "#27364A",
+      "lineColor": "rgba(0, 0, 0, 0)",
+      "lineWidth": 0
+    },
+    {
+      "order": 66,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/qh0fepkz",
+      "id": "66",
+      "bbox": [
+        858,
+        466,
+        38,
+        38
+      ],
+      "geometry": "ellipse",
+      "fillColor": "#27364A",
+      "lineColor": "rgba(0, 0, 0, 0)",
+      "lineWidth": 0
+    },
+    {
+      "order": 67,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/j2t83itg",
+      "id": "67",
+      "bbox": [
+        858,
+        471,
+        38,
+        20
+      ],
+      "geometry": "rect",
+      "text": "6",
+      "textPreview": "6",
+      "resolvedFontSize": 14.51,
+      "resolvedTextStyle": {
+        "anchor": 2,
+        "fontSize": 14.51,
+        "typeface": "Aptos Display",
+        "color": "#FFFFFF",
+        "bold": true,
+        "alignment": "center",
+        "verticalAlignment": "middle",
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "6"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "6",
+          "resolvedTextStyle": {
+            "fontSize": 14.51,
+            "typeface": "Aptos Display",
+            "color": "#FFFFFF",
+            "bold": true,
+            "alignment": "center"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "6",
+              "fontSize": 14.51,
+              "typeface": "Aptos Display",
+              "color": "#FFFFFF",
+              "bold": true
+            }
+          ],
+          "marginLeft": 0
+        }
+      ],
+      "fillColor": "rgba(0, 0, 0, 0)",
+      "lineColor": "rgba(0, 0, 0, 0)",
+      "lineWidth": 0
+    },
+    {
+      "order": 68,
+      "kind": "image",
+      "scope": "slide",
+      "aid": "im/byhgn29g",
+      "id": "68",
+      "bbox": [
+        1144,
+        468,
+        25,
+        25
+      ],
+      "alt": "TrendingUp icon",
+      "contentType": "image/svg+xml",
+      "imageFit": "contain",
+      "asset": {
+        "assetId": "8bbd3528-4560-4487-944f-2de09c7755b6",
+        "contentType": "image/svg+xml",
+        "byteLength": 239
+      }
+    },
+    {
+      "order": 69,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/1cfa9w3m",
+      "id": "69",
+      "bbox": [
+        912,
+        464,
+        226,
+        20
+      ],
+      "geometry": "rect",
+      "text": "Ergebnis & Ausblick",
+      "textPreview": "Ergebnis & Ausblick",
+      "resolvedFontSize": 15.6,
+      "resolvedTextStyle": {
+        "anchor": 1,
+        "fontSize": 15.6,
+        "typeface": "Aptos Display",
+        "color": "#1E293B",
+        "bold": true,
+        "alignment": "left",
+        "verticalAlignment": "top",
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "Ergebnis & Ausblick"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "Ergebnis & Ausblick",
+          "resolvedTextStyle": {
+            "fontSize": 15.6,
+            "typeface": "Aptos Display",
+            "color": "#1E293B",
+            "bold": true,
+            "alignment": "left"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "Ergebnis & Ausblick",
+              "fontSize": 15.6,
+              "typeface": "Aptos Display",
+              "color": "#1E293B",
+              "bold": true
+            }
+          ],
+          "marginLeft": 0
+        }
+      ],
+      "fillColor": "rgba(0, 0, 0, 0)",
+      "lineColor": "rgba(0, 0, 0, 0)",
+      "lineWidth": 0
+    },
+    {
+      "order": 70,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/7y1kre1w",
+      "id": "70",
+      "bbox": [
+        912,
+        492,
+        256,
+        36
+      ],
+      "geometry": "rect",
+      "text": "Interpretation, Grenzen und Multi-Trip-VRP als nächster Schritt.",
+      "textPreview": "Interpretation, Grenzen und Multi-Trip-VRP als nächster Schritt.",
+      "resolvedFontSize": 11.2,
+      "resolvedTextStyle": {
+        "anchor": 1,
+        "fontSize": 11.2,
+        "typeface": "Aptos",
+        "color": "#334155",
+        "alignment": "left",
+        "verticalAlignment": "top",
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 2,
+        "lines": [
+          {
+            "index": 1,
+            "text": "Interpretation, Grenzen und Multi-Trip-VRP als"
+          },
+          {
+            "index": 2,
+            "text": "nächster Schritt."
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "Interpretation, Grenzen und Multi-Trip-VRP als nächster Schritt.",
+          "resolvedTextStyle": {
+            "fontSize": 11.2,
+            "typeface": "Aptos",
+            "color": "#334155",
+            "alignment": "left"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "Interpretation, Grenzen und Multi-Trip-VRP als nächster Schritt.",
+              "fontSize": 11.2,
+              "typeface": "Aptos",
+              "color": "#334155"
+            }
+          ],
+          "marginLeft": 0
+        }
+      ],
+      "fillColor": "rgba(0, 0, 0, 0)",
+      "lineColor": "rgba(0, 0, 0, 0)",
+      "lineWidth": 0
+    },
+    {
+      "order": 71,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/ed8v6psf",
+      "id": "71",
+      "bbox": [
+        68,
+        690,
+        1144,
+        1
+      ],
+      "geometry": "rect",
+      "fillColor": "#DDE6EF",
+      "lineColor": "rgba(0, 0, 0, 0)",
+      "lineWidth": 0
+    },
+    {
+      "order": 72,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/p4r65wju",
+      "id": "72",
+      "bbox": [
+        68,
+        704,
+        250,
+        11
+      ],
+      "geometry": "rect",
+      "text": "Optimierung von Logistikrouten",
+      "textPreview": "Optimierung von Logistikrouten",
+      "resolvedFontSize": 8.4,
+      "resolvedTextStyle": {
+        "anchor": 1,
+        "fontSize": 8.4,
+        "typeface": "Aptos",
+        "color": "#64748B",
+        "bold": true,
+        "alignment": "left",
+        "verticalAlignment": "top",
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "Optimierung von Logistikrouten"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "Optimierung von Logistikrouten",
+          "resolvedTextStyle": {
+            "fontSize": 8.4,
+            "typeface": "Aptos",
+            "color": "#64748B",
+            "bold": true,
+            "alignment": "left"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "Optimierung von Logistikrouten",
+              "fontSize": 8.4,
+              "typeface": "Aptos",
+              "color": "#64748B",
+              "bold": true
+            }
+          ],
+          "marginLeft": 0
+        }
+      ],
+      "fillColor": "rgba(0, 0, 0, 0)",
+      "lineColor": "rgba(0, 0, 0, 0)",
+      "lineWidth": 0
+    },
+    {
+      "order": 73,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/wjudg7ad",
+      "id": "73",
+      "bbox": [
+        1190,
+        704,
+        22,
+        11
+      ],
+      "geometry": "rect",
+      "text": "02",
+      "textPreview": "02",
+      "resolvedFontSize": 8.4,
+      "resolvedTextStyle": {
+        "anchor": 1,
+        "fontSize": 8.4,
+        "typeface": "Aptos",
+        "color": "#64748B",
+        "alignment": "right",
+        "verticalAlignment": "top",
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "02"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "02",
+          "resolvedTextStyle": {
+            "fontSize": 8.4,
+            "typeface": "Aptos",
+            "color": "#64748B",
+            "alignment": "right"
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "02",
+              "fontSize": 8.4,
+              "typeface": "Aptos",
+              "color": "#64748B"
+            }
+          ],
+          "marginLeft": 0
+        }
+      ],
+      "fillColor": "rgba(0, 0, 0, 0)",
+      "lineColor": "rgba(0, 0, 0, 0)",
+      "lineWidth": 0
+    }
+  ],
+  "composeRuns": []
+}

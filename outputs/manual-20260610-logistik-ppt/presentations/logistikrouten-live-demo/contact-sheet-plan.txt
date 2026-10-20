@@ -1,0 +1,25 @@
+Slide plan:
+1. Dark title with metric rail and route motif.
+2. Problem framing with three proof metrics and compact challenge matrix.
+3. Toolchain map grouped by user-facing, compute, data/routing, infrastructure.
+4. System architecture dependency diagram with containment boundaries.
+5. Docker and server deployment split between dev and prod.
+6. Four-stage pipeline as horizontal workflow with data handoffs.
+7. Algorithm short lesson with p-median, assignment, VRP and scoring formula.
+8. Required factors: distance, traffic, capacity as implementation proof.
+9. Product/API proof: frontend view, pipeline control, REST endpoints.
+10. Results and value proof: dashboard metrics and comparison baseline.
+11. Live demo runbook as final slide.
+
+Macro-layout families:
+- cover metric rail
+- evidence split with metric tiles
+- toolchain orbit/map
+- architecture dependency diagram
+- deployment comparison
+- horizontal workflow
+- algorithm formula sheet
+- factor matrix
+- product proof surface
+- metric dashboard proof
+- live demo checklist

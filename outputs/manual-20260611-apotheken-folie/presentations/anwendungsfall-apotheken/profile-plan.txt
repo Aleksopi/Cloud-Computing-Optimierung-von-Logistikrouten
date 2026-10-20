@@ -1,0 +1,8 @@
+Task mode: targeted-edit/create replacement slide
+Primary deck-profile: engineering-platform
+Secondary gates: academic logistics presentation; preserve clean white/navy/teal style from supplied screenshot.
+Required proof objects: 400 pharmacy locations, OpenStreetMap provenance, nationwide Swiss distribution, pharmacy-first framing.
+Source/asset requirements: Read backend/data/apotheken.geojson and render a real pharmacy point distribution. No external assets.
+Brand/design constraints: Remove pipeline-step and vehicle-type metrics. Avoid stock imagery and generic decorative cards.
+QA gates: Render preview at 1280x720; no text overlap; map point cloud should be visible and apotheken-focused.
+Known missing inputs: User did not ask for a full deck rebuild explicitly, so final output includes a standalone PPTX and PNG replacement slide.

@@ -1,0 +1,9 @@
+Local project sources used:
+- README.md: project overview, architecture, services, pipeline steps, data sources, quickstart, tests, deployment notes.
+- Praesentation.md: existing long-form presentation content and section structure.
+- docs/Sprecherleitfaden.md: existing talk timing and concise speaker narrative.
+- docker-compose.yml: development services, ports, env vars, health checks, bind mounts.
+- docker-compose.prod.yml: production override, nginx, server path, restart policy, internalized ports.
+
+No external web sources used.
+No logos or identity marks embedded.

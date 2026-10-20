@@ -1,0 +1,12 @@
+Task mode: non-template single-slide build
+
+Claim:
+OSRM liefert in Step 4 die echte Straßenbasis fuer den Greedy-VRP: pro Depot werden Distanz- und Fahrzeitmatrizen berechnet, daraus entstehen marginale Kosten, Zeit und CO2 je Kandidatenstopp. Die finale Route wird danach als OSRM-Geometrie gespeichert.
+
+Evidence:
+- backend/app/pipeline/a4_routes.py: osrm_distance_duration_matrix per depot, insertion delta, weighted score, _road_geometry
+- backend/app/services/osrm.py: /table distance,duration and /route geometry
+- README: generalized cost formula and OSRM road times
+
+Slide:
+1. OSRM im Greedy-VRP: echte Strassenzeiten statt Luftlinie

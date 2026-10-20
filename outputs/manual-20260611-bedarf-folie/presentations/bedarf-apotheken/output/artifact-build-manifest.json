@@ -1,0 +1,28 @@
+{
+  "output": "/Users/aleksferro/Desktop/Code/DHBW/4 Semester/Cloud-Computing-Optimierung-von-Logistikrouten/outputs/manual-20260611-bedarf-folie/presentations/bedarf-apotheken/output/Bedarf_Apotheken.pptx",
+  "outputBytes": 20815,
+  "slideCount": 1,
+  "slideSize": {
+    "width": 1280,
+    "height": 720
+  },
+  "previewDir": "/Users/aleksferro/Desktop/Code/DHBW/4 Semester/Cloud-Computing-Optimierung-von-Logistikrouten/outputs/manual-20260611-bedarf-folie/presentations/bedarf-apotheken/preview",
+  "previewPaths": [
+    "/Users/aleksferro/Desktop/Code/DHBW/4 Semester/Cloud-Computing-Optimierung-von-Logistikrouten/outputs/manual-20260611-bedarf-folie/presentations/bedarf-apotheken/preview/slide-01.png"
+  ],
+  "layoutDir": "/Users/aleksferro/Desktop/Code/DHBW/4 Semester/Cloud-Computing-Optimierung-von-Logistikrouten/outputs/manual-20260611-bedarf-folie/presentations/bedarf-apotheken/layout",
+  "layoutResults": [
+    {
+      "layoutPath": "/Users/aleksferro/Desktop/Code/DHBW/4 Semester/Cloud-Computing-Optimierung-von-Logistikrouten/outputs/manual-20260611-bedarf-folie/presentations/bedarf-apotheken/layout/slide-01.layout.json"
+    }
+  ],
+  "contactSheet": "/Users/aleksferro/Desktop/Code/DHBW/4 Semester/Cloud-Computing-Optimierung-von-Logistikrouten/outputs/manual-20260611-bedarf-folie/presentations/bedarf-apotheken/preview/contact-sheet.png",
+  "slides": [
+    {
+      "index": 1,
+      "requestedSlideNumber": 1,
+      "modulePath": "/Users/aleksferro/Desktop/Code/DHBW/4 Semester/Cloud-Computing-Optimierung-von-Logistikrouten/outputs/manual-20260611-bedarf-folie/presentations/bedarf-apotheken/slides/slide-01.mjs",
+      "exportName": "slide01"
+    }
+  ]
+}

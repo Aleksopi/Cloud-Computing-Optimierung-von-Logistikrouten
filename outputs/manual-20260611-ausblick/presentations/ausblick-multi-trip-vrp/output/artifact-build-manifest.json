@@ -1,0 +1,28 @@
+{
+  "output": "/Users/aleksferro/Desktop/Code/DHBW/4 Semester/Cloud-Computing-Optimierung-von-Logistikrouten/outputs/manual-20260611-ausblick/presentations/ausblick-multi-trip-vrp/output/Ausblick_Multi_Trip_VRP.pptx",
+  "outputBytes": 20899,
+  "slideCount": 1,
+  "slideSize": {
+    "width": 1280,
+    "height": 720
+  },
+  "previewDir": "/Users/aleksferro/Desktop/Code/DHBW/4 Semester/Cloud-Computing-Optimierung-von-Logistikrouten/outputs/manual-20260611-ausblick/presentations/ausblick-multi-trip-vrp/preview",
+  "previewPaths": [
+    "/Users/aleksferro/Desktop/Code/DHBW/4 Semester/Cloud-Computing-Optimierung-von-Logistikrouten/outputs/manual-20260611-ausblick/presentations/ausblick-multi-trip-vrp/preview/slide-01.png"
+  ],
+  "layoutDir": "/Users/aleksferro/Desktop/Code/DHBW/4 Semester/Cloud-Computing-Optimierung-von-Logistikrouten/outputs/manual-20260611-ausblick/presentations/ausblick-multi-trip-vrp/layout",
+  "layoutResults": [
+    {
+      "layoutPath": "/Users/aleksferro/Desktop/Code/DHBW/4 Semester/Cloud-Computing-Optimierung-von-Logistikrouten/outputs/manual-20260611-ausblick/presentations/ausblick-multi-trip-vrp/layout/slide-01.layout.json"
+    }
+  ],
+  "contactSheet": "/Users/aleksferro/Desktop/Code/DHBW/4 Semester/Cloud-Computing-Optimierung-von-Logistikrouten/outputs/manual-20260611-ausblick/presentations/ausblick-multi-trip-vrp/preview/contact-sheet.png",
+  "slides": [
+    {
+      "index": 1,
+      "requestedSlideNumber": 1,
+      "modulePath": "/Users/aleksferro/Desktop/Code/DHBW/4 Semester/Cloud-Computing-Optimierung-von-Logistikrouten/outputs/manual-20260611-ausblick/presentations/ausblick-multi-trip-vrp/slides/slide-01.mjs",
+      "exportName": "slide01"
+    }
+  ]
+}
