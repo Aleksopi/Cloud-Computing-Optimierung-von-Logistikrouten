@@ -1,0 +1,28 @@
+{
+  "output": "/Users/aleksferro/Desktop/Code/DHBW/4 Semester/Cloud-Computing-Optimierung-von-Logistikrouten/outputs/manual-20260611-container-neu/presentations/container-architektur-neu/output/Container_Architektur_Neu.pptx",
+  "outputBytes": 26931,
+  "slideCount": 1,
+  "slideSize": {
+    "width": 1280,
+    "height": 720
+  },
+  "previewDir": "/Users/aleksferro/Desktop/Code/DHBW/4 Semester/Cloud-Computing-Optimierung-von-Logistikrouten/outputs/manual-20260611-container-neu/presentations/container-architektur-neu/preview",
+  "previewPaths": [
+    "/Users/aleksferro/Desktop/Code/DHBW/4 Semester/Cloud-Computing-Optimierung-von-Logistikrouten/outputs/manual-20260611-container-neu/presentations/container-architektur-neu/preview/slide-01.png"
+  ],
+  "layoutDir": "/Users/aleksferro/Desktop/Code/DHBW/4 Semester/Cloud-Computing-Optimierung-von-Logistikrouten/outputs/manual-20260611-container-neu/presentations/container-architektur-neu/layout",
+  "layoutResults": [
+    {
+      "layoutPath": "/Users/aleksferro/Desktop/Code/DHBW/4 Semester/Cloud-Computing-Optimierung-von-Logistikrouten/outputs/manual-20260611-container-neu/presentations/container-architektur-neu/layout/slide-01.layout.json"
+    }
+  ],
+  "contactSheet": "/Users/aleksferro/Desktop/Code/DHBW/4 Semester/Cloud-Computing-Optimierung-von-Logistikrouten/outputs/manual-20260611-container-neu/presentations/container-architektur-neu/preview/contact-sheet.png",
+  "slides": [
+    {
+      "index": 1,
+      "requestedSlideNumber": 1,
+      "modulePath": "/Users/aleksferro/Desktop/Code/DHBW/4 Semester/Cloud-Computing-Optimierung-von-Logistikrouten/outputs/manual-20260611-container-neu/presentations/container-architektur-neu/slides/slide-01.mjs",
+      "exportName": "slide01"
+    }
+  ]
+}

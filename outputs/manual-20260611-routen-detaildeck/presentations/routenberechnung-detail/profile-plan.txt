@@ -1,0 +1,13 @@
+Task mode: non-template multi-slide build
+
+Claim spine:
+1. OSRM liefert die echte Strassenbasis: Distanz, Fahrzeit und spaeter Route-Geometrie.
+2. Live Traffic ersetzt bzw. skaliert die Zeitkomponente; bei Ausfall gibt es definierte Fallbacks.
+3. Die drei Faktoren Kosten, Zeit und Umwelt werden als marginale Insertionskosten berechnet.
+4. Der Greedy-VRP baut pro Hub eine Mehrstopp-Tour, indem er den niedrigsten normierten Score waehlt.
+
+Slides:
+1. OSRM + Live Traffic als Datenbasis
+2. Kosten, Zeit, Umwelt im Score
+3. Algorithmus: So entsteht eine Fahrzeugtour
+4. Mini-Rechenbeispiel: naechster Stopp

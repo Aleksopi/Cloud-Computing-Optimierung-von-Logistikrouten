@@ -1,5 +1,7 @@
-# Environment
+# Environment (secrets — only .env.example is tracked)
 .env
+.env.*
+!.env.example
 
 # Python
 __pycache__/
@@ -8,7 +10,7 @@ __pycache__/
 .pytest_cache/
 
 # Node
-frontend/node_modules/
+node_modules/
 frontend/dist/
 docs/build/node_modules/
 docs/build/package-lock.json
@@ -17,8 +19,9 @@ docs/build/package-lock.json
 docs/*.pdf
 docs/build/preview/
 
-# OS
+# OS / Office lock files
 .DS_Store
+~$*
 
 # Docker volumes (not tracked)
 postgres_data/
@@ -33,3 +36,11 @@ osrm/data/*.osm.pbf
 
 # Old workspace
 workspace/
+
+# User-specific Claude config
+.claude/
+
+# Generated outputs — slide decks in outputs/ ARE tracked (only copies)
+
+# Documentation files
+docs/

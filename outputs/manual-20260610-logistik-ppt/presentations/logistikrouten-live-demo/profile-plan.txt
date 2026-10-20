@@ -1,0 +1,9 @@
+task mode: create
+primary deck-profile: engineering-platform
+secondary gates: product-platform-lite, live-demo-readiness
+required proof objects: architecture map, toolchain map, Docker/server deployment view, pipeline workflow, algorithm explanation, demo script
+source requirements: local README.md, Praesentation.md, docs/Sprecherleitfaden.md, docker-compose.yml, docker-compose.prod.yml
+asset requirements: editable native shapes and generic Lucide icons only; no unverified logos
+brand authenticity constraints: no pseudo company logo; use project name, Swiss logistics palette, and technical system labels as visual identity
+QA gates: diagrams must preserve dependency direction; technical labels must be legible at thumbnail and full size; final slide must give a concrete live demo flow
+known missing inputs: presenter name, exact course/date metadata; deck uses placeholders where needed

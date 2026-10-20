@@ -1,0 +1,28 @@
+{
+  "output": "/Users/aleksferro/Desktop/Code/DHBW/4 Semester/Cloud-Computing-Optimierung-von-Logistikrouten/outputs/manual-20260611-routen-osrm-detail/presentations/routenoptimierung-osrm-detail/output/Routenoptimierung_OSRM_Detail.pptx",
+  "outputBytes": 21744,
+  "slideCount": 1,
+  "slideSize": {
+    "width": 1280,
+    "height": 720
+  },
+  "previewDir": "/Users/aleksferro/Desktop/Code/DHBW/4 Semester/Cloud-Computing-Optimierung-von-Logistikrouten/outputs/manual-20260611-routen-osrm-detail/presentations/routenoptimierung-osrm-detail/preview",
+  "previewPaths": [
+    "/Users/aleksferro/Desktop/Code/DHBW/4 Semester/Cloud-Computing-Optimierung-von-Logistikrouten/outputs/manual-20260611-routen-osrm-detail/presentations/routenoptimierung-osrm-detail/preview/slide-01.png"
+  ],
+  "layoutDir": "/Users/aleksferro/Desktop/Code/DHBW/4 Semester/Cloud-Computing-Optimierung-von-Logistikrouten/outputs/manual-20260611-routen-osrm-detail/presentations/routenoptimierung-osrm-detail/layout",
+  "layoutResults": [
+    {
+      "layoutPath": "/Users/aleksferro/Desktop/Code/DHBW/4 Semester/Cloud-Computing-Optimierung-von-Logistikrouten/outputs/manual-20260611-routen-osrm-detail/presentations/routenoptimierung-osrm-detail/layout/slide-01.layout.json"
+    }
+  ],
+  "contactSheet": "/Users/aleksferro/Desktop/Code/DHBW/4 Semester/Cloud-Computing-Optimierung-von-Logistikrouten/outputs/manual-20260611-routen-osrm-detail/presentations/routenoptimierung-osrm-detail/preview/contact-sheet.png",
+  "slides": [
+    {
+      "index": 1,
+      "requestedSlideNumber": 1,
+      "modulePath": "/Users/aleksferro/Desktop/Code/DHBW/4 Semester/Cloud-Computing-Optimierung-von-Logistikrouten/outputs/manual-20260611-routen-osrm-detail/presentations/routenoptimierung-osrm-detail/slides/slide-01.mjs",
+      "exportName": "slide01"
+    }
+  ]
+}

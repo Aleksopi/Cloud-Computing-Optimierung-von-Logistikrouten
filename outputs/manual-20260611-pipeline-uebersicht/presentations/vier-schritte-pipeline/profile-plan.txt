@@ -1,0 +1,12 @@
+Task mode: non-template single-slide build
+
+Claim:
+Die Optimierung besteht aus vier klar getrennten Schritten. Jeder Schritt nutzt persistierte Daten, schreibt sein Ergebnis zurück und schafft die Eingabe für den nächsten Schritt.
+
+Design system:
+- White analytical slide, navy title, teal/blue/amber step colors
+- One central process canvas with data layers above/below
+- German labels, compact enough for presentation use
+
+Slide:
+1. Die vierstufige Optimierungs-Pipeline

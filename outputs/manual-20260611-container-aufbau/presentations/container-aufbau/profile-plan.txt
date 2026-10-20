@@ -1,0 +1,12 @@
+Task mode: non-template single-slide build
+
+Claim:
+Der produktive Stack besteht aus sieben Containern in einem Docker-Compose-Netzwerk. Nginx ist die einzige externe Kante; Backend, Worker, Redis, PostgreSQL und OSRM kommunizieren intern über Service-Namen.
+
+Evidence:
+- docker-compose.yml: postgres, redis, osrm, backend, worker, frontend
+- docker-compose.prod.yml: nginx production edge
+- nginx/nginx.conf: /api/ -> backend, / -> frontend
+
+Slide:
+1. Container-Aufbau im Docker-Compose-Stack

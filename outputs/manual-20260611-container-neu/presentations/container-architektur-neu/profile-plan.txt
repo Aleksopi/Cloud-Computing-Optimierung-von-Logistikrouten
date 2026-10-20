@@ -1,0 +1,8 @@
+task mode: create
+primary deck-profile: engineering-platform
+secondary profile gates: readable technical architecture slide for a university presentation
+required proof objects: Docker Compose network diagram, seven-container role table, async data-flow explanation
+source/asset requirements: user-provided architecture text and screenshot reference; no external assets required
+brand authenticity constraints: match existing logistics deck typography, footer, purple system architecture accent
+profile-specific QA gates: one-slide output, editable PPTX, external access only through nginx visible, no text overlap
+known missing inputs: no source PPTX supplied; recreated as a new standalone slide

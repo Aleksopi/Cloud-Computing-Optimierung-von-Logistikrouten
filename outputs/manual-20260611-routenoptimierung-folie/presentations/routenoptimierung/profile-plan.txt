@@ -1,0 +1,8 @@
+Task mode: create single slide only
+Primary deck-profile: engineering-platform
+Secondary gates: academic logistics presentation; explain route optimization with actual greedy multi-objective VRP logic.
+Required proof objects: OSRM distance+duration matrix, vehicle ordering by weights, feasible-stop constraints, generalized marginal cost score, last-mile/backbone note.
+Source/asset requirements: backend/app/pipeline/a4_routes.py; README/Präsentation Step 4 notes.
+Brand/design constraints: Match existing white/navy/teal visual system. No full deck modification.
+QA gates: Render 1280x720 PNG; no text overlap; formula readable; route graphic clear.
+Known missing inputs: None.

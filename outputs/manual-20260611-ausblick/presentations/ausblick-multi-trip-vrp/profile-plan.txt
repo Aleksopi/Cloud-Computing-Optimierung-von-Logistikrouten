@@ -1,0 +1,10 @@
+Task mode: non-template single-slide build
+
+Claim:
+Der nächste fachliche Ausbau ist ein Multi-Trip Vehicle Routing Problem: Fahrzeuge sollen nach einer abgeschlossenen Tour am selben Tag erneut beladen und für weitere Touren eingesetzt werden.
+
+Key message:
+Das ist mathematisch anspruchsvoller als das aktuelle Greedy-VRP, weil Route, Fahrzeugkapazität, Rückkehrzeit, Neubeladung, Schichtdauer und Öffnungszeiten gemeinsam optimiert werden müssen. Korrekte Einordnung: NP-schwer / kombinatorisches Optimierungsproblem.
+
+Slide:
+1. Ausblick — mehrere Touren pro Fahrzeug
